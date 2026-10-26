@@ -1,0 +1,6 @@
+{
+  "name": "AQUAVORTEX: Strava Swim Telemetry & Oceanman 14K Lab",
+  "description": "Analítica avanzada de natación para export de Strava/Garmin: evolución de ritmo /100m, cadencia SPM, SWOLF, DPS y readiness score para el Oceanman 14K Lago d'Orta 2027.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

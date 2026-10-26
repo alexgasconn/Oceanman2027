@@ -1,0 +1,197 @@
+/**
+ * Types for AQUAVORTEX Swim Telemetry & Oceanman 14K Lab
+ */
+
+export type SwimActivityType = 'pool' | 'open_water';
+
+export interface SwimSplit {
+  km: number;
+  paceSec: number;
+  cadenceSpm?: number;
+  heartRate?: number;
+  swolf?: number;
+}
+
+export interface SwimActivity {
+  id: string;
+  date: string; // ISO format YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  title: string;
+  type: SwimActivityType; // 'pool' | 'open_water'
+  distance: number; // in meters
+  elapsedTime: number; // in seconds
+  movingTime: number; // in seconds
+  movingRatio?: number; // (movingTime / elapsedTime) * 100
+  elevationHigh?: number; // meters from Strava (non-zero indicates open water)
+  elevationLow?: number; // meters from Strava
+  isOpenWaterDetected?: boolean;
+  openWaterTrigger?: string;
+  pacePer100m: number; // in seconds per 100m strictly using movingTime
+  averageCadence?: number; // SPM (Strokes / minute)
+  totalStrokes?: number;
+  swolf?: number;
+  dps?: number; // Distance per stroke cycle in meters
+  strokeIndex?: number; // Speed * DPS (m²/s)
+  avgHeartRate?: number;
+  maxHeartRate?: number;
+  calories?: number;
+  poolLength?: 25 | 50 | null;
+  waterTemp?: number; // °C
+  hasWetsuit?: boolean;
+  notes?: string;
+  source: 'strava_zip' | 'strava_csv' | 'garmin_fit' | 'gpx' | 'tcx' | 'demo' | 'manual';
+  splits?: SwimSplit[];
+}
+
+export interface OceanmanMilestone {
+  km: number;
+  label: string;
+  description: string;
+  officialCutOffTime?: string; // e.g. "2h 15min"
+  officialCutOffClock?: string; // e.g. "11:45 AM"
+  estimatedPassingTime: string;
+  estimatedClockTime?: string;
+  cutOffMarginMinutes?: number;
+  nutritionAdvice: string;
+  isFeedStation?: boolean;
+  isCutOffPoint?: boolean;
+}
+
+export interface CheckMilestone {
+  level: string;
+  label: string;
+  target: string;
+  isCompleted: boolean;
+  timeframe?: string;
+}
+
+export interface OrtaEnvironmentalCondition {
+  id: string;
+  title: string;
+  value: string;
+  subtext: string;
+  impact: string;
+  recommendation: string;
+  category: 'water_temp' | 'air_temp' | 'wind' | 'chop' | 'clarity' | 'solar';
+}
+
+export interface ReadinessCheckItem {
+  id: string;
+  checkNumber: number; // 1 to 7
+  category: 'endurance' | 'volume' | 'open_water' | 'efficiency' | 'pacing' | 'nutrition';
+  title: string;
+  shortTitle?: string;
+  description: string;
+  baseline: string; // Dynamically computed from swimmer's activities!
+  milestones: CheckMilestone[];
+  milestone1?: CheckMilestone;
+  milestone2?: CheckMilestone;
+  currentValue: number;
+  targetValue: number;
+  currentValueFormatted: string;
+  targetValueFormatted: string;
+  unit: string;
+  status: 'passed' | 'warning' | 'pending';
+  score: number; // 0 - 100
+  weight: number; // % contribution to overall score
+  details: string;
+  summary?: string;
+}
+
+export interface HistoricalReadinessPoint {
+  date: string; // YYYY-MM-DD
+  label: string;
+  readinessScore: number; // 0 - 100
+  volumeLast30DaysKm: number;
+  volumeLast14DaysKm: number;
+  longestSwimKm: number;
+  openWaterSessionsTotal: number;
+  openWaterKmTotal: number;
+  avgPaceSec: number;
+  milestoneUnlocked?: string;
+}
+
+export interface MandatoryEquipmentCheck {
+  id: string;
+  name: string;
+  officialRule: string;
+  isMandatory: boolean;
+  prohibitedDetails?: string;
+}
+
+export interface OceanmanReadiness {
+  overallScore: number; // 0 - 100
+  statusLevel: 'Elite Prepared' | 'Ready to Conquer' | 'Solid Progress' | 'High Endurance Gap';
+  
+  // Specific Window Volumes
+  volumeLast14DaysMeters: number;
+  volumeLast30DaysMeters: number;
+  volumeLast60DaysMeters: number;
+  volumeLast90DaysMeters: number;
+  
+  // Checks and criteria breakdown
+  checks: ReadinessCheckItem[];
+  passedChecksCount: number;
+  totalChecksCount: number;
+  
+  longestSwimMeters: number;
+  longestDurationSec: number;
+  openWaterSessionsCount: number;
+  openWaterTotalMeters: number;
+  coldWaterSessionsCount: number; // ≤ 20°C
+  
+  avgWeeklyVolumeMeters: number;
+  targetWeeklyVolumeMeters: number;
+  
+  estimatedFinishTimeSec: number;
+  estimatedFinishTimeString: string;
+  estimatedPacePer100mSec: number;
+  estimatedPaceString: string;
+  timeRangeMin: string;
+  timeRangeMax: string;
+
+  // Official Cut-off safety analysis (Lago d'Orta 6h max limit)
+  officialLimitSeconds: number; // 6h = 21600s
+  cutOffMarginKm5Min: number;
+  cutOffMarginKm10Min: number;
+  cutOffMarginFinishMin: number;
+  isWithinOfficialCutOff: boolean;
+
+  daysRemaining: number;
+  weeksRemaining: number;
+  
+  nutritionPlan: {
+    carbsPerHourGrams: number;
+    hydrationMlPerHour: number;
+    sodiumMgPerHour: number;
+    totalCarbsGrams: number;
+    feedingIntervalMinutes: number;
+    gelCount: number;
+    feedingsCount: number;
+    officialFloatingStationsCount: number; // 2 official stations in 14K
+  };
+
+  mandatoryEquipment: MandatoryEquipmentCheck[];
+  wetsuitRegulation: {
+    lakeExpectedTempC: number;
+    ruleStatus: string;
+    details: string;
+  };
+  worldSlotEligibility: string;
+
+  strengths: string[];
+  recommendations: string[];
+  milestones: OceanmanMilestone[];
+  historicalEvolution: HistoricalReadinessPoint[];
+}
+
+export interface WeeklyMileage {
+  weekKey: string;
+  label: string;
+  distanceMeters: number;
+  distanceKm: number;
+  poolDistanceKm: number;
+  openWaterDistanceKm: number;
+  sessionsCount: number;
+  avgPaceSec: number;
+  avgCadence: number;
+}
