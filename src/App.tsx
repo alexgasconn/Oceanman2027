@@ -75,6 +75,45 @@ export default function App() {
 
   useEffect(() => {
     if (!dataInitialized) return;
+    let isCurrent = true;
+
+    fetch('/data/activities.csv')
+      .then(response => {
+        if (!response.ok) throw new Error('No root activities.csv found');
+        return response.text();
+      })
+      .then(csv => {
+        if (!isCurrent) return;
+        const sourceActivities = new Map(parseStravaCsv(csv).map(activity => [activity.id, activity]));
+        setActivities(current => {
+          let changed = false;
+          const migrated = current.map(activity => {
+            const source = sourceActivities.get(activity.id);
+            if (!source || (
+              activity.hasPoolLength === source.hasPoolLength &&
+              activity.elevationHigh === source.elevationHigh &&
+              activity.elevationLow === source.elevationLow
+            )) return activity;
+            changed = true;
+            return recalculateSwimMetrics({
+              ...activity,
+              elevationHigh: source.elevationHigh,
+              elevationLow: source.elevationLow,
+              hasPoolLength: source.hasPoolLength,
+            });
+          });
+          return changed ? migrated : current;
+        });
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [dataInitialized]);
+
+  useEffect(() => {
+    if (!dataInitialized) return;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(activities));
     } catch (e) {

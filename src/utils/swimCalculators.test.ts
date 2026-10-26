@@ -157,6 +157,19 @@ climb,2026-10-02,Pool name with noise,Swim,2400,2300,2000,1.0,0.2`;
   assert.equal(parsed.find(activity => activity.id === 'climb')?.type, 'pool');
 });
 
+test('parseStravaCsv uses recorded pool length to distinguish low-elevation open water', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Pool Length,Elevation High,Elevation Low
+open-water,2026-10-01,Open water,Swim,2400,2300,2000,,182.8,182.8
+pool,2026-10-02,Pool session,Swim,2400,2300,2000,25,3.3,0.6
+old-pool,2024-10-03,Old pool,Swim,2400,2300,2000,,0,0`;
+
+  const parsed = parseStravaCsv(csv);
+
+  assert.equal(parsed.find(activity => activity.id === 'open-water')?.type, 'open_water');
+  assert.equal(parsed.find(activity => activity.id === 'pool')?.type, 'pool');
+  assert.equal(parsed.find(activity => activity.id === 'old-pool')?.type, 'pool');
+});
+
 test('parseStravaCsv preserves commas, apostrophes, escaped quotes, and multiline cells', () => {
   const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Activity Description,Elapsed Time,Moving Time,Distance
 501,"Oct 26, 2026, 6:18:12 AM","Travesía d'Orta, tramo ""norte""",Swim,"nota con, coma

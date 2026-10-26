@@ -159,11 +159,9 @@ export function calculateSWOLF(pacePer100mSec: number, dps: number, poolLength: 
   return Math.round(timeForPool + strokesForPool);
 }
 
-/**
- * Open water if elevation varies, or if GPS elevation exists while Strava recorded no pool length
- * (pool swims have either a pool length or all-zero elevation).
- */
+/** Open water if elevation varies significantly, or GPS elevation exists without a recorded pool length. */
 export function detectOpenWater(elevationHigh: number, elevationLow: number, hasPoolLength: boolean | undefined): boolean {
+  if (hasPoolLength === true) return false;
   if (elevationHigh - elevationLow >= 1.5) return true;
   return hasPoolLength === false && (elevationHigh !== 0 || elevationLow !== 0);
 }
@@ -190,7 +188,9 @@ export function recalculateSwimMetrics(activity: SwimActivity): SwimActivity {
     type,
     distance,
     isOpenWaterDetected: type === 'open_water',
-    openWaterTrigger: type === 'open_water' ? `Cambio de elevación GPS: ${elevationRange.toFixed(1)}m` : 'Piscina (sin cambio de elevación GPS)',
+    openWaterTrigger: type === 'open_water'
+      ? elevationRange >= 1.5 ? `Cambio de elevación GPS: ${elevationRange.toFixed(1)}m` : 'GPS sin longitud de piscina'
+      : 'Piscina (sin cambio de elevación GPS)',
     poolDistanceCorrection: needsDistanceCorrection ? 'historical-20m' : activity.poolDistanceCorrection,
     pacePer100m: Number(pacePer100m.toFixed(1)),
     poolLength,
