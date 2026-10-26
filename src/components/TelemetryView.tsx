@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { SwimActivity } from '../types/swim.ts';
 import { ActivitiesListView } from './ActivitiesListView.tsx';
+import { SwimAnalyticsView } from './SwimAnalyticsView.tsx';
 import { EvolutionTelemetryView } from './EvolutionTelemetryView.tsx';
 import { formatDistance, formatDuration, formatPace } from '../utils/swimCalculators.ts';
 
@@ -26,7 +27,7 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
   onSelectActivity,
   onOpenImport,
 }) => {
-  const [subTab, setSubTab] = useState<'sessions' | 'charts'>('sessions');
+  const [subTab, setSubTab] = useState<'sessions' | 'analysis' | 'charts'>('sessions');
 
   // Key metrics calculation
   const metrics = useMemo(() => {
@@ -96,6 +97,17 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
               <span>Sesiones ({activities.length})</span>
             </button>
             <button
+              onClick={() => setSubTab('analysis')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
+                subTab === 'analysis'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              <span>Distribución</span>
+            </button>
+            <button
               onClick={() => setSubTab('charts')}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
                 subTab === 'charts'
@@ -103,8 +115,8 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
-              <BarChart2 className="w-3.5 h-3.5" />
-              <span>Gráficos Biomecánicos</span>
+              <TrendingUp className="w-3.5 h-3.5" />
+              <span>Evolución</span>
             </button>
           </div>
         </div>
@@ -152,6 +164,8 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
           onSelectActivity={onSelectActivity}
           onOpenImport={onOpenImport}
         />
+      ) : subTab === 'analysis' ? (
+        <SwimAnalyticsView activities={activities} />
       ) : (
         <EvolutionTelemetryView
           activities={activities}

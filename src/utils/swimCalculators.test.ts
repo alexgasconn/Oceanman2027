@@ -41,6 +41,8 @@ test('findPaceOutlierIds flags only extreme fast and slow paces', () => {
     title: `Swim ${index}`,
     type: 'open_water',
     distance: 3000,
+    elapsedTime: pace * 30,
+    movingTime: pace * 30,
     pacePer100m: pace,
     source: 'strava_csv',
   }));

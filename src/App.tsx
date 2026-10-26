@@ -209,7 +209,6 @@ export default function App() {
               <div className="space-y-8">
                 <OceanmanCountdownCard
                   readiness={readiness}
-                  onExploreCourse={() => setActiveTab('calculator')}
                   onExploreReadiness={() => {
                     const el = document.getElementById('readiness-details');
                     if (el) el.scrollIntoView({ behavior: 'smooth' });

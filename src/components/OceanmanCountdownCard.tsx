@@ -83,25 +83,31 @@ export const OceanmanCountdownCard: React.FC<OceanmanCountdownCardProps> = ({
               OCEANMAN <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">14K</span>
             </h1>
             <p className="mt-3 text-sm text-slate-300">14 km · corte: 6 h</p>
-            <div className="mt-7 flex items-end gap-5 sm:gap-7">
-              <div className="flex items-baseline gap-2">
-                <span className="text-7xl sm:text-8xl font-black font-mono leading-none text-white tabular-nums">
-                  {timeLeft.days}
-                </span>
-                <span className="text-base text-cyan-300">días</span>
+            <div className="mt-7 max-w-2xl overflow-hidden rounded-xl border border-cyan-100/15 bg-slate-950/70 shadow-xl backdrop-blur-sm">
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-2.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-200">Cuenta atrás</span>
+                <span className="text-[10px] font-mono tabular-nums text-slate-400">13 JUN · 09:30</span>
               </div>
-              <div className="grid grid-cols-3 gap-3 pb-1 text-center font-mono tabular-nums">
-                <div>
-                  <span className="block text-xl font-bold text-cyan-300">{String(timeLeft.hours).padStart(2, '0')}</span>
-                  <span className="text-[10px] text-slate-400">h</span>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:gap-5 sm:px-5">
+                <div className="flex items-baseline gap-2 sm:gap-3">
+                  <span className="text-7xl sm:text-8xl font-black font-mono leading-[0.85] text-white tabular-nums">
+                    {timeLeft.days}
+                  </span>
+                  <span className="pb-1 text-xs font-bold uppercase text-amber-300">días</span>
                 </div>
-                <div>
-                  <span className="block text-xl font-bold text-slate-200">{String(timeLeft.minutes).padStart(2, '0')}</span>
-                  <span className="text-[10px] text-slate-400">min</span>
-                </div>
-                <div>
-                  <span className="block text-xl font-bold text-slate-400">{String(timeLeft.seconds).padStart(2, '0')}</span>
-                  <span className="text-[10px] text-slate-400">s</span>
+                <div className="grid grid-cols-3 divide-x divide-white/10 border-l border-white/10 pl-2 text-center sm:pl-4">
+                  <div className="min-w-12 px-2">
+                    <span className="block font-mono text-xl font-bold tabular-nums text-cyan-200">{String(timeLeft.hours).padStart(2, '0')}</span>
+                    <span className="text-[9px] uppercase text-slate-500">h</span>
+                  </div>
+                  <div className="min-w-12 px-2">
+                    <span className="block font-mono text-xl font-bold tabular-nums text-slate-200">{String(timeLeft.minutes).padStart(2, '0')}</span>
+                    <span className="text-[9px] uppercase text-slate-500">min</span>
+                  </div>
+                  <div className="min-w-12 px-2">
+                    <span className="block font-mono text-xl font-bold tabular-nums text-slate-400">{String(timeLeft.seconds).padStart(2, '0')}</span>
+                    <span className="text-[9px] uppercase text-slate-500">s</span>
+                  </div>
                 </div>
               </div>
             </div>
