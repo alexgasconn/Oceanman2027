@@ -31,7 +31,6 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
   onOpenCalculator,
 }) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'passed' | 'warning' | 'pending'>('all');
-  const [selectedEnvCategory, setSelectedEnvCategory] = useState<string | null>(null);
 
   // Filter the 7 checks
   const filteredChecks = useMemo(() => {
@@ -170,19 +169,12 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-1">
-              <CheckCircle2 className="w-4 h-4 text-cyan-400" />
-              <span>Metodología de Gran Fondo en Aguas Abiertas</span>
-            </div>
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <span>Hitos de Control de Preparación (Oceanman 14K)</span>
+              <span>Checks Oceanman 14K</span>
               <span className="text-xs font-mono font-normal text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
                 {readiness.passedChecksCount} de {readiness.totalChecksCount} superados
               </span>
             </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Evaluación automatizada y limpia calculada a partir de tu archivo de actividades.
-            </p>
           </div>
 
           {/* Clean Filter Tabs */}
@@ -333,54 +325,26 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                   </div>
                 </div>
 
-                {/* Clean Row 4: Single-line dynamic baseline & concise diagnostic verdict */}
-                <div className="mt-2.5 pt-2 border-t border-slate-800/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1 text-[11px] text-slate-400">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-slate-500 font-medium">Punto de partida:</span>
-                    <span className="text-slate-300 font-mono">{check.baseline}</span>
-                  </div>
-                  <div className="text-cyan-300 font-medium italic sm:text-right">
-                    {check.summary || check.details}
-                  </div>
-                </div>
               </div>
             );
           })}
         </div>
       </div>
 
-      {/* CONDICIONES HISTÓRICAS DEL LAGO D'ORTA (JUNIO) - NUEVA SECCIÓN */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-cyan-400 uppercase tracking-wider mb-1">
-              <Compass className="w-4 h-4 text-cyan-400" />
-              <span>Meteorología & Limnología del Lago d'Orta (Piamonte, Italia)</span>
-            </div>
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <span>Condiciones Históricas de Carrera (Mes de Junio)</span>
-              <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                Medias de Junio 2021-2026
-              </span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Parámetros limnológicos y meteorológicos clave recopilados para preparar los 14 km entre Omegna y Lido di Gozzano.
-            </p>
-          </div>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Compass className="w-4 h-4 text-cyan-400" />
+          <h3 className="text-base font-bold text-white">Lago d'Orta · junio</h3>
+          <span className="text-xs text-slate-500">Medias 2021–2026</span>
         </div>
 
         {/* 6 Environmental Historical Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {ORTA_HISTORICAL_CONDITIONS.map((cond) => {
-            const isSelected = selectedEnvCategory === cond.category;
             return (
               <div
                 key={cond.id}
-                onClick={() => setSelectedEnvCategory(isSelected ? null : cond.category)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer ${isSelected
-                    ? 'bg-slate-950 border-cyan-400 ring-1 ring-cyan-400/50'
-                    : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                  }`}
+                className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl"
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2.5">
@@ -400,20 +364,6 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                   </div>
                 </div>
 
-                <div className="mt-3 pt-2.5 border-t border-slate-800/80 space-y-1.5 text-xs">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-500 block">Impacto en la natación:</span>
-                    <p className="text-slate-300 text-[11px] leading-relaxed mt-0.5">
-                      {cond.impact}
-                    </p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-cyan-400 block mt-2">Recomendación técnica:</span>
-                    <p className="text-slate-200 text-[11px] font-medium leading-relaxed mt-0.5 bg-slate-900/80 p-2 rounded-lg border border-slate-800">
-                      {cond.recommendation}
-                    </p>
-                  </div>
-                </div>
               </div>
             );
           })}

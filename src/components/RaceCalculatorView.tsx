@@ -50,6 +50,9 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
 
   // Calories and energy estimation
   const totalHours = strategy.totalOfficialRaceSec / 3600;
+  const availableFeedTimeSec = Math.max(0, strategy.officialCutoffSec - strategy.pureSwimMovingSec);
+  const remainingCutoffSec = strategy.officialCutoffSec - strategy.totalOfficialRaceSec;
+  const remainingCutoffLabel = `${remainingCutoffSec < 0 ? '-' : ''}${formatDuration(Math.abs(remainingCutoffSec))}`;
   const totalCalories = Math.round(strategy.effectiveDistanceMeters * 0.28 + totalHours * 120);
   const totalCarbsGrams = Math.round(totalHours * 75);
   const totalHydrationMl = Math.round(totalHours * 650);
@@ -328,12 +331,11 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
               </div>
             </div>
 
-            {/* Time Breakdown: Pure Swim vs Pauses */}
-            <div className="grid grid-cols-3 gap-3 pt-4 border-t border-slate-800 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-slate-800 text-xs">
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <span className="text-slate-400 block text-[10px] flex items-center gap-1">
                   <Timer className="w-3 h-3 text-cyan-400" />
-                  <span>Tiempo Neto en Nado</span>
+                  <span>Nado neto</span>
                 </span>
                 <span className="font-mono font-bold text-white text-base tabular-nums">
                   {strategy.pureSwimMovingString}
@@ -343,20 +345,23 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <span className="text-slate-400 block text-[10px] flex items-center gap-1">
                   <Clock className="w-3 h-3 text-amber-400" />
-                  <span>Pausa Estación 1 (5k)</span>
+                  <span>Tiempo disponible para avituallar</span>
                 </span>
                 <span className="font-mono font-bold text-amber-400 text-base tabular-nums">
-                  +{strategy.station1.recommendedPauseString}
+                  {formatDuration(availableFeedTimeSec)}
+                </span>
+                <span className="block mt-1 text-[10px] text-slate-500">
+                  Pausas previstas: {formatDuration(strategy.totalRestPauseSec)}
                 </span>
               </div>
 
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <span className="text-slate-400 block text-[10px] flex items-center gap-1">
                   <Clock className="w-3 h-3 text-amber-400" />
-                  <span>Pausa Estación 2 (10k)</span>
+                  <span>Margen tras avituallamientos</span>
                 </span>
-                <span className="font-mono font-bold text-amber-400 text-base tabular-nums">
-                  +{strategy.station2.recommendedPauseString}
+                <span className={`font-mono font-bold text-base tabular-nums ${remainingCutoffSec >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {remainingCutoffLabel}
                 </span>
               </div>
             </div>

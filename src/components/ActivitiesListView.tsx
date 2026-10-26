@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronRight, Waves, Calendar, Clock, Droplet, Shield, RotateCcw } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Waves, Calendar, Clock, Droplet, Shield, RotateCcw } from 'lucide-react';
 import { SwimActivity } from '../types/swim.ts';
 import { formatDistance, formatDuration, formatPace } from '../utils/swimCalculators.ts';
 
@@ -8,6 +8,8 @@ interface ActivitiesListViewProps {
   onSelectActivity: (activity: SwimActivity) => void;
   onOpenImport: () => void;
 }
+
+type SortField = 'date' | 'title' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'cadence' | 'dps' | 'swolf';
 
 export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   activities,
@@ -18,9 +20,8 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   const [filterType, setFilterType] = useState<'all' | 'open_water' | 'pool'>('all');
   const [distRange, setDistRange] = useState<'all' | 'under_3k' | '3k_6k' | '6k_10k' | 'over_10k'>('all');
   const [tempFilter, setTempFilter] = useState<'all' | 'cold' | 'mild' | 'warm'>('all');
-  const [wetsuitFilter, setWetsuitFilter] = useState<'all' | 'wetsuit' | 'skin'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'last_30d' | 'last_90d' | 'this_year'>('all');
-  const [sortBy, setSortBy] = useState<'date' | 'distance' | 'pace'>('date');
+  const [sortBy, setSortBy] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
@@ -29,11 +30,38 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
     setFilterType('all');
     setDistRange('all');
     setTempFilter('all');
-    setWetsuitFilter('all');
     setDateFilter('all');
   };
 
-  const hasActiveFilters = search !== '' || filterType !== 'all' || distRange !== 'all' || tempFilter !== 'all' || wetsuitFilter !== 'all' || dateFilter !== 'all';
+  const hasActiveFilters = search !== '' || filterType !== 'all' || distRange !== 'all' || tempFilter !== 'all' || dateFilter !== 'all';
+
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortOrder(order => order === 'asc' ? 'desc' : 'asc');
+      return;
+    }
+
+    setSortBy(field);
+    setSortOrder(field === 'pace' || field === 'title' ? 'asc' : 'desc');
+  };
+
+  const renderSortHeader = (label: string, field: SortField, alignment = '') => (
+    <th
+      className={`py-3.5 px-4 font-semibold ${alignment}`}
+      aria-sort={sortBy === field ? sortOrder === 'asc' ? 'ascending' : 'descending' : 'none'}
+    >
+      <button
+        type="button"
+        onClick={() => handleSort(field)}
+        className="inline-flex items-center gap-1.5 hover:text-white cursor-pointer"
+      >
+        <span>{label}</span>
+        {sortBy === field
+          ? sortOrder === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />
+          : <ArrowUpDown className="w-3.5 h-3.5 opacity-50" />}
+      </button>
+    </th>
+  );
 
   const filteredAndSorted = useMemo(() => {
     const now = new Date('2026-10-24T12:00:00Z').getTime();
@@ -64,10 +92,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
         if (tempFilter === 'mild' && (temp <= 20 || temp > 24)) return false;
         if (tempFilter === 'warm' && temp <= 24) return false;
 
-        // Wetsuit filter
-        if (wetsuitFilter === 'wetsuit' && !a.hasWetsuit) return false;
-        if (wetsuitFilter === 'skin' && a.hasWetsuit) return false;
-
         // Date window filter
         if (dateFilter !== 'all') {
           const actTime = new Date(a.date).getTime();
@@ -79,17 +103,29 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
         return true;
       })
       .sort((a, b) => {
-        let diff = 0;
-        if (sortBy === 'date') {
-          diff = new Date(b.date).getTime() - new Date(a.date).getTime();
-        } else if (sortBy === 'distance') {
-          diff = b.distance - a.distance;
-        } else if (sortBy === 'pace') {
-          diff = a.pacePer100m - b.pacePer100m;
-        }
-        return sortOrder === 'desc' ? diff : -diff;
+        const getValue = (activity: SwimActivity): string | number | undefined => {
+          switch (sortBy) {
+            case 'date': return new Date(activity.date).getTime();
+            case 'title': return activity.title.toLocaleLowerCase();
+            case 'distance': return activity.distance;
+            case 'movingTime': return activity.movingTime;
+            case 'movingRatio': return activity.movingRatio ?? (activity.elapsedTime > 0 ? activity.movingTime / activity.elapsedTime * 100 : 100);
+            case 'pace': return activity.pacePer100m;
+            case 'cadence': return activity.averageCadence;
+            case 'dps': return activity.dps;
+            case 'swolf': return activity.swolf;
+          }
+        };
+        const first = getValue(a);
+        const second = getValue(b);
+        if (first === undefined) return second === undefined ? 0 : 1;
+        if (second === undefined) return -1;
+        const diff = typeof first === 'string' && typeof second === 'string'
+          ? first.localeCompare(second)
+          : Number(first) - Number(second);
+        return sortOrder === 'asc' ? diff : -diff;
       });
-  }, [activities, search, filterType, distRange, tempFilter, wetsuitFilter, dateFilter, sortBy, sortOrder]);
+  }, [activities, search, filterType, distRange, tempFilter, dateFilter, sortBy, sortOrder]);
 
   return (
     <div className="space-y-6">
@@ -152,31 +188,12 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
               )}
             </button>
 
-            <div className="flex items-center gap-2">
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-                className="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cyan-500 cursor-pointer"
-              >
-                <option value="date">Fecha (reciente)</option>
-                <option value="distance">Distancia (mayor)</option>
-                <option value="pace">Ritmo (más rápido)</option>
-              </select>
-              <button
-                onClick={() => setSortOrder(prev => prev === 'desc' ? 'asc' : 'desc')}
-                className="p-1.5 bg-slate-950 border border-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors cursor-pointer"
-                title="Invertir orden"
-                aria-label="Invertir orden"
-              >
-                <ArrowUpDown className="w-4 h-4" />
-              </button>
-            </div>
           </div>
         </div>
 
         {/* Collapsible Advanced Filters Drawer */}
         {showAdvancedFilters && (
-          <div className="pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs animate-in fade-in duration-200">
+          <div className="pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs animate-in fade-in duration-200">
             {/* Filter: Distance Range */}
             <div>
               <span className="text-slate-400 font-semibold block mb-1.5">Distancia de Sesión:</span>
@@ -205,20 +222,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                 <option value="cold">Fría (≤ 20°C · Símil Lago d'Orta)</option>
                 <option value="mild">Templada (21°C – 24°C)</option>
                 <option value="warm">Cálida / Piscina (&gt; 24°C)</option>
-              </select>
-            </div>
-
-            {/* Filter: Equipment / Wetsuit */}
-            <div>
-              <span className="text-slate-400 font-semibold block mb-1.5">Equipamiento:</span>
-              <select
-                value={wetsuitFilter}
-                onChange={(e) => setWetsuitFilter(e.target.value as any)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-cyan-500"
-              >
-                <option value="all">Todos los trajes</option>
-                <option value="wetsuit">Con Neopreno (Wetsuit)</option>
-                <option value="skin">Sin Neopreno (Skin swim)</option>
               </select>
             </div>
 
@@ -257,17 +260,15 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
               <tr>
-                <th className="py-3.5 px-4 font-semibold">Fecha</th>
-                <th className="py-3.5 px-4 font-semibold">Título & Clasificación GPS (Elevación)</th>
-                <th className="py-3.5 px-4 font-semibold text-right">Distancia</th>
-                <th className="py-3.5 px-4 font-semibold text-right">Moving Time</th>
-                <th className="py-3.5 px-4 font-semibold text-right" title="Moving Ratio = (Moving Time / Elapsed Time) * 100. Indica continuidad de nado sin pausas.">
-                  Moving Ratio
-                </th>
-                <th className="py-3.5 px-4 font-semibold text-right">Ritmo /100m</th>
-                <th className="py-3.5 px-4 font-semibold text-right">Cadencia</th>
-                <th className="py-3.5 px-4 font-semibold text-right">DPS (m/ciclo)</th>
-                <th className="py-3.5 px-4 font-semibold text-right">SWOLF</th>
+                  {renderSortHeader('Fecha', 'date')}
+                  {renderSortHeader('Actividad', 'title')}
+                  {renderSortHeader('Distancia', 'distance', 'text-right')}
+                  {renderSortHeader('Tiempo nado', 'movingTime', 'text-right')}
+                  {renderSortHeader('Moving Ratio', 'movingRatio', 'text-right')}
+                  {renderSortHeader('Ritmo /100m', 'pace', 'text-right')}
+                  {renderSortHeader('Cadencia', 'cadence', 'text-right')}
+                  {renderSortHeader('DPS', 'dps', 'text-right')}
+                  {renderSortHeader('SWOLF', 'swolf', 'text-right')}
                 <th className="py-3.5 px-4 text-center">Detalle</th>
               </tr>
             </thead>

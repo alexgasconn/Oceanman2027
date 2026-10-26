@@ -83,6 +83,28 @@ export const OceanmanCountdownCard: React.FC<OceanmanCountdownCardProps> = ({
               OCEANMAN <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">14K</span>
             </h1>
             <p className="mt-3 text-sm text-slate-300">14 km · corte: 6 h</p>
+            <div className="mt-7 flex items-end gap-5 sm:gap-7">
+              <div className="flex items-baseline gap-2">
+                <span className="text-7xl sm:text-8xl font-black font-mono leading-none text-white tabular-nums">
+                  {timeLeft.days}
+                </span>
+                <span className="text-base text-cyan-300">días</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 pb-1 text-center font-mono tabular-nums">
+                <div>
+                  <span className="block text-xl font-bold text-cyan-300">{String(timeLeft.hours).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-slate-400">h</span>
+                </div>
+                <div>
+                  <span className="block text-xl font-bold text-slate-200">{String(timeLeft.minutes).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-slate-400">min</span>
+                </div>
+                <div>
+                  <span className="block text-xl font-bold text-slate-400">{String(timeLeft.seconds).padStart(2, '0')}</span>
+                  <span className="text-[10px] text-slate-400">s</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Large Readiness Score Gauge */}
@@ -149,12 +171,7 @@ export const OceanmanCountdownCard: React.FC<OceanmanCountdownCardProps> = ({
         </div>
 
         {/* Bottom Strip: Live Countdown Clock & Actions */}
-        <div className="pt-6 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-baseline gap-2 text-slate-300">
-            <span className="text-2xl font-black font-mono text-white tabular-nums">{timeLeft.days}</span>
-            <span className="text-xs">días para la salida</span>
-          </div>
-
+        <div className="pt-6 border-t border-slate-800/80 flex justify-end">
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <button
               onClick={onExploreReadiness}
