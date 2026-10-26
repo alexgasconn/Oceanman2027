@@ -24,7 +24,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   activities,
   onSelectActivity,
 }) => {
-  const [metricTab, setMetricTab] = useState<'pace' | 'cadence' | 'dps' | 'swolf'>('pace');
+  const [metricTab, setMetricTab] = useState<'pace' | 'cadence' | 'dps' | 'swolf' | 'distance' | 'heartRate'>('pace');
   const [timeGrouping, setTimeGrouping] = useState<'weekly' | 'monthly'>('weekly');
   const [typeFilter, setTypeFilter] = useState<'all' | 'open_water' | 'pool'>('all');
   const [minDistFilter, setMinDistFilter] = useState<number>(0);
@@ -114,11 +114,22 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   const dataPoints = useMemo(() => {
     if (groupedActivities.length === 0) return [];
 
-    const values = groupedActivities.map(({ activities: sessions }) => {
+    const values = groupedActivities.map(({ activities: sessions }): number | null => {
       if (metricTab === 'pace') {
         const distance = sessions.reduce((sum, activity) => sum + activity.distance, 0);
         const movingTime = sessions.reduce((sum, activity) => sum + activity.movingTime, 0);
         return distance > 0 ? (movingTime / distance) * 100 : 0;
+      }
+      if (metricTab === 'distance') {
+        return sessions.reduce((sum, activity) => sum + activity.distance, 0) / sessions.length / 1000;
+      }
+      if (metricTab === 'heartRate') {
+        const heartRates = sessions
+          .map(activity => activity.avgHeartRate)
+          .filter((heartRate): heartRate is number => typeof heartRate === 'number' && heartRate > 0);
+        return heartRates.length > 0
+          ? heartRates.reduce((sum, heartRate) => sum + heartRate, 0) / heartRates.length
+          : null;
       }
 
       const metrics = sessions.map(activity => {
@@ -129,15 +140,18 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
       return metrics.reduce((sum, value) => sum + value, 0) / metrics.length;
     });
 
-    const minVal = Math.min(...values);
-    const maxVal = Math.max(...values);
+    const validValues = values.filter((value): value is number => value !== null);
+    if (validValues.length === 0) return [];
+    const minVal = Math.min(...validValues);
+    const maxVal = Math.max(...validValues);
     const valRange = maxVal - minVal || 1;
 
     return groupedActivities.map((group, index) => {
+      const val = values[index];
+      if (val === null) return null;
       const x = groupedActivities.length === 1
         ? padding.left + innerWidth / 2
         : padding.left + (index / (groupedActivities.length - 1)) * innerWidth;
-      const val = values[index];
 
       // Note: For Pace and SWOLF, lower is faster/better, so we invert or display intuitively
       let yNormalized = (val - minVal) / valRange;
@@ -155,7 +169,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
         x,
         y,
       };
-    });
+    }).filter((point): point is NonNullable<typeof point> => point !== null);
   }, [groupedActivities, metricTab, innerWidth, innerHeight, padding]);
 
   // Generate SVG path for trend
@@ -165,6 +179,8 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
       return i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
     }, '');
   }, [dataPoints]);
+
+  const hoveredDataPoint = dataPoints.find(point => point.act.id === hoveredPoint?.id);
 
   return (
     <div className="space-y-8">
@@ -242,7 +258,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
           </div>
 
           {/* Metric Selector Tabs */}
-          <div className="flex items-center gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 text-xs font-semibold">
+          <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 text-xs font-semibold">
             <button
               onClick={() => setMetricTab('pace')}
               className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
@@ -274,6 +290,22 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
               }`}
             >
               SWOLF
+            </button>
+            <button
+              onClick={() => setMetricTab('distance')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                metricTab === 'distance' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Distancia media/sesión
+            </button>
+            <button
+              onClick={() => setMetricTab('heartRate')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
+                metricTab === 'heartRate' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Pulsaciones medias
             </button>
           </div>
         </div>
@@ -321,9 +353,9 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
               className="bg-slate-950 border border-slate-800 rounded px-2.5 py-1 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
             >
               <option value={0}>Todas las distancias</option>
-              <option value={3000}>≥ 3.000m (fondo)</option>
-              <option value={5000}>≥ 5.000m (largo)</option>
-              <option value={8000}>≥ 8.000m (ultra tests)</option>
+              {[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000].map(distance => (
+                <option key={distance} value={distance}>≥ {distance.toLocaleString('es-ES')}m</option>
+              ))}
             </select>
           </div>
 
@@ -421,6 +453,10 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
           </div>
         </div>
 
+        {metricTab === 'heartRate' && dataPoints.length === 0 && (
+          <p className="py-4 text-center text-xs text-slate-400">No hay pulsaciones registradas en las sesiones filtradas.</p>
+        )}
+
         {/* Dynamic Hover Tooltip Preview */}
         {hoveredPoint && (
           <div className="mt-4 p-3 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-4 text-xs animate-in fade-in duration-200">
@@ -430,6 +466,21 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
               <span className="text-slate-400 font-mono">({hoveredPoint.date})</span>
             </div>
             <div className="flex items-center gap-4 text-slate-300 font-mono">
+              {hoveredDataPoint && (
+                <span>
+                  Media del periodo: <strong className="text-white">
+                    {metricTab === 'distance'
+                      ? `${hoveredDataPoint.val.toFixed(2)} km/sesión`
+                      : metricTab === 'heartRate'
+                        ? `${Math.round(hoveredDataPoint.val)} ppm`
+                        : metricTab === 'pace'
+                          ? formatPace(hoveredDataPoint.val)
+                          : metricTab === 'cadence'
+                            ? `${Math.round(hoveredDataPoint.val)} SPM`
+                            : hoveredDataPoint.val.toFixed(2)}
+                  </strong> <span className="text-slate-500">({hoveredDataPoint.label}, {hoveredDataPoint.sessionCount} sesiones)</span>
+                </span>
+              )}
               <span>Dist: <strong className="text-white">{formatDistance(hoveredPoint.distance)}</strong></span>
               <span>Ritmo: <strong className="text-cyan-400">{formatPace(hoveredPoint.pacePer100m)}</strong></span>
               <span>Cadencia: <strong className="text-amber-400">{hoveredPoint.averageCadence} SPM</strong></span>
@@ -469,7 +520,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
         </div>
 
         <div className="space-y-3">
-          {weeklyData.slice(-12).map((w, idx) => {
+          {weeklyData.slice(-26).map((w, idx) => {
             const totalBarWidth = Math.min(100, (w.distanceKm / 20) * 100);
             const openWaterBarWidth = w.distanceKm > 0 ? totalBarWidth * (w.openWaterDistanceKm / w.distanceKm) : 0;
             const poolBarWidth = totalBarWidth - openWaterBarWidth;
