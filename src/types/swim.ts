@@ -24,6 +24,7 @@ export interface SwimActivity {
   elevationHigh?: number; // meters from Strava (non-zero indicates open water)
   elevationLow?: number; // meters from Strava
   isOpenWaterDetected?: boolean;
+  hasPoolLength?: boolean; // Strava recorded a pool length (pool swims only)
   openWaterTrigger?: string;
   pacePer100m: number; // in seconds per 100m strictly using movingTime
   averageCadence?: number; // SPM (Strokes / minute)

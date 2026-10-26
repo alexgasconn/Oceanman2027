@@ -159,11 +159,20 @@ export function calculateSWOLF(pacePer100mSec: number, dps: number, poolLength: 
   return Math.round(timeForPool + strokesForPool);
 }
 
+/**
+ * Open water if elevation varies, or if GPS elevation exists while Strava recorded no pool length
+ * (pool swims have either a pool length or all-zero elevation).
+ */
+export function detectOpenWater(elevationHigh: number, elevationLow: number, hasPoolLength: boolean | undefined): boolean {
+  if (elevationHigh - elevationLow >= 1.5) return true;
+  return hasPoolLength === false && (elevationHigh !== 0 || elevationLow !== 0);
+}
+
 export function recalculateSwimMetrics(activity: SwimActivity): SwimActivity {
   if (activity.distance <= 0 || activity.movingTime <= 0) return activity;
 
   const elevationRange = (activity.elevationHigh ?? 0) - (activity.elevationLow ?? 0);
-  const type: SwimActivity['type'] = elevationRange >= 1.5 ? 'open_water' : 'pool';
+  const type: SwimActivity['type'] = detectOpenWater(activity.elevationHigh ?? 0, activity.elevationLow ?? 0, activity.hasPoolLength) ? 'open_water' : 'pool';
   const isHistoricalPool = type === 'pool' && activity.date.slice(0, 10) < HISTORICAL_POOL_LENGTH_CUTOFF;
   const recordedPoolLength = activity.poolLength && activity.poolLength > 0 && activity.poolLength !== 20 ? activity.poolLength : 25;
   const needsDistanceCorrection = isHistoricalPool && activity.poolDistanceCorrection !== 'historical-20m';
@@ -341,9 +350,10 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
     }
 
     const elevationRange = elevationHigh - elevationLow;
-    const isOpenWater = elevationRange >= 1.5;
-    const activityType: 'open_water' | 'pool' = isOpenWater ? 'open_water' : 'pool';
     const importedPoolLength = poolLengthIdx >= 0 ? parseFloat(cols[poolLengthIdx]) : Number.NaN;
+    const hasPoolLength = Number.isFinite(importedPoolLength) && importedPoolLength > 0;
+    const isOpenWater = detectOpenWater(elevationHigh, elevationLow, poolLengthIdx >= 0 ? hasPoolLength : undefined);
+    const activityType: 'open_water' | 'pool' = isOpenWater ? 'open_water' : 'pool';
     const recordedPoolLength = Number.isFinite(importedPoolLength) && importedPoolLength > 0 ? importedPoolLength : 25;
     const historicalPool = activityType === 'pool' && actDate < HISTORICAL_POOL_LENGTH_CUTOFF;
     const poolLength = activityType === 'pool'
@@ -375,7 +385,10 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
       elevationHigh: Number(elevationHigh.toFixed(1)),
       elevationLow: Number(elevationLow.toFixed(1)),
       isOpenWaterDetected: isOpenWater,
-      openWaterTrigger: isOpenWater ? `Cambio de elevación GPS: ${elevationRange.toFixed(1)}m` : 'Piscina (sin cambio de elevación GPS)',
+      hasPoolLength: poolLengthIdx >= 0 ? hasPoolLength : undefined,
+      openWaterTrigger: isOpenWater
+        ? elevationRange >= 1.5 ? `Cambio de elevación GPS: ${elevationRange.toFixed(1)}m` : 'GPS sin longitud de piscina'
+        : 'Piscina (sin cambio de elevación GPS)',
       pacePer100m: Number(pacePer100m.toFixed(1)),
       averageCadence: avgCadence,
       totalStrokes: Math.round((movingTime / 60) * avgCadence),
