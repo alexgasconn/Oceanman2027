@@ -9,7 +9,7 @@ interface ActivitiesListViewProps {
   onOpenImport: () => void;
 }
 
-type SortField = 'date' | 'title' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'cadence' | 'dps' | 'swolf';
+type SortField = 'date' | 'title' | 'type' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'cadence' | 'dps' | 'swolf';
 
 export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   activities,
@@ -42,7 +42,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
     }
 
     setSortBy(field);
-    setSortOrder(field === 'pace' || field === 'title' ? 'asc' : 'desc');
+    setSortOrder(field === 'pace' || field === 'title' || field === 'type' ? 'asc' : 'desc');
   };
 
   const renderSortHeader = (label: string, field: SortField, alignment = '') => (
@@ -107,6 +107,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
           switch (sortBy) {
             case 'date': return new Date(activity.date).getTime();
             case 'title': return activity.title.toLocaleLowerCase();
+            case 'type': return activity.type;
             case 'distance': return activity.distance;
             case 'movingTime': return activity.movingTime;
             case 'movingRatio': return activity.movingRatio ?? (activity.elapsedTime > 0 ? activity.movingTime / activity.elapsedTime * 100 : 100);
@@ -149,25 +150,22 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
             <div className="flex items-center gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 text-xs">
               <button
                 onClick={() => setFilterType('all')}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
-                  filterType === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${filterType === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Todos ({activities.length})
               </button>
               <button
                 onClick={() => setFilterType('open_water')}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
-                  filterType === 'open_water' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${filterType === 'open_water' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Aguas Abiertas
               </button>
               <button
                 onClick={() => setFilterType('pool')}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${
-                  filterType === 'pool' ? 'bg-blue-500/20 text-blue-300' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${filterType === 'pool' ? 'bg-blue-500/20 text-blue-300' : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Piscina
               </button>
@@ -175,11 +173,10 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
 
             <button
               onClick={() => setShowAdvancedFilters(prev => !prev)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
-                showAdvancedFilters || hasActiveFilters
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${showAdvancedFilters || hasActiveFilters
                   ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/50'
                   : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
-              }`}
+                }`}
             >
               <Filter className="w-3.5 h-3.5" />
               <span>Filtros Avanzados</span>
@@ -260,22 +257,23 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
           <table className="w-full text-left text-xs">
             <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
               <tr>
-                  {renderSortHeader('Fecha', 'date')}
-                  {renderSortHeader('Actividad', 'title')}
-                  {renderSortHeader('Distancia', 'distance', 'text-right')}
-                  {renderSortHeader('Tiempo nado', 'movingTime', 'text-right')}
-                  {renderSortHeader('Moving Ratio', 'movingRatio', 'text-right')}
-                  {renderSortHeader('Ritmo /100m', 'pace', 'text-right')}
-                  {renderSortHeader('Cadencia', 'cadence', 'text-right')}
-                  {renderSortHeader('DPS', 'dps', 'text-right')}
-                  {renderSortHeader('SWOLF', 'swolf', 'text-right')}
+                {renderSortHeader('Fecha', 'date')}
+                {renderSortHeader('Actividad', 'title')}
+                {renderSortHeader('Tipo', 'type')}
+                {renderSortHeader('Distancia', 'distance', 'text-right')}
+                {renderSortHeader('Tiempo nado', 'movingTime', 'text-right')}
+                {renderSortHeader('Moving Ratio', 'movingRatio', 'text-right')}
+                {renderSortHeader('Ritmo /100m', 'pace', 'text-right')}
+                {renderSortHeader('Cadencia', 'cadence', 'text-right')}
+                {renderSortHeader('DPS', 'dps', 'text-right')}
+                {renderSortHeader('SWOLF', 'swolf', 'text-right')}
                 <th className="py-3.5 px-4 text-center">Detalle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums text-slate-300">
               {filteredAndSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-12 text-center text-slate-500 font-sans">
+                  <td colSpan={11} className="py-12 text-center text-slate-500 font-sans">
                     No se encontraron sesiones con los filtros seleccionados.{' '}
                     <button
                       onClick={resetFilters}
@@ -287,7 +285,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                 </tr>
               ) : (
                 filteredAndSorted.map((act) => {
-                  const isOpen = act.type === 'open_water' || (act.elevationHigh && act.elevationHigh !== 0);
                   const ratio = act.movingRatio || (act.elapsedTime > 0 ? Math.round((act.movingTime / act.elapsedTime) * 100) : 100);
 
                   return (
@@ -301,33 +298,18 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                       </td>
                       <td className="py-3 px-4 font-sans font-semibold text-white group-hover:text-cyan-300 transition-colors">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`w-2 h-2 rounded-full shrink-0 ${
-                              isOpen ? 'bg-cyan-400 shadow-sm shadow-cyan-400/50' : 'bg-blue-400'
-                            }`}
-                          />
                           <span className="truncate max-w-xs">{act.title}</span>
-                          {isOpen ? (
-                            <span 
-                              className="text-[10px] text-cyan-300 font-medium bg-cyan-950/80 border border-cyan-700/60 px-1.5 py-0.5 rounded shrink-0 shadow-xs"
-                              title={`Aguas Abiertas detectado por GPS: Elevación Máx ${act.elevationHigh || 0}m, Mín ${act.elevationLow || 0}m`}
-                            >
-                              Aguas Abiertas · Elev {act.elevationHigh !== undefined ? `${act.elevationHigh}m` : '>0m'}
-                            </span>
-                          ) : (
-                            <span 
-                              className="text-[10px] text-blue-300 font-medium bg-blue-950/80 border border-blue-800/60 px-1.5 py-0.5 rounded shrink-0"
-                              title="Piscina detectada: Elevación Strava = 0m"
-                            >
-                              Piscina · Elev 0m
-                            </span>
-                          )}
                           {act.waterTemp && act.waterTemp <= 20 && (
                             <span className="text-[10px] text-blue-300 font-mono bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.5 rounded shrink-0" title={`Agua fresca: ${act.waterTemp}°C`}>
                               ❄ {act.waterTemp}°C
                             </span>
                           )}
                         </div>
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center rounded px-2 py-1 font-sans text-[10px] font-semibold ${act.type === 'open_water' ? 'bg-cyan-950/70 text-cyan-300' : 'bg-blue-950/70 text-blue-300'}`}>
+                          {act.type === 'open_water' ? 'Aguas abiertas' : 'Piscina'}
+                        </span>
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-white whitespace-nowrap">
                         {formatDistance(act.distance)}
@@ -341,13 +323,12 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                         )}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${
-                          ratio >= 90
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${ratio >= 90
                             ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800/40'
                             : ratio >= 80
-                            ? 'text-cyan-400 bg-cyan-950/60 border border-cyan-800/40'
-                            : 'text-amber-400 bg-amber-950/60 border border-amber-800/40'
-                        }`} title={`Continuidad: ${ratio}% en movimiento (Pausa: ${formatDuration(act.elapsedTime - act.movingTime)})`}>
+                              ? 'text-cyan-400 bg-cyan-950/60 border border-cyan-800/40'
+                              : 'text-amber-400 bg-amber-950/60 border border-amber-800/40'
+                          }`} title={`Continuidad: ${ratio}% en movimiento (Pausa: ${formatDuration(act.elapsedTime - act.movingTime)})`}>
                           {ratio}%
                         </span>
                       </td>

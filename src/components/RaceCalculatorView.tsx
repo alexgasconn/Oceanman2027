@@ -228,8 +228,8 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                     key={strokes}
                     onClick={() => setSightingStrokes(strokes)}
                     className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${sightingStrokes === strokes
-                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
                       }`}
                   >
                     c/ {strokes} brazadas
@@ -253,8 +253,8 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                     key={item.id}
                     onClick={() => setFatigueStrategy(item.id as any)}
                     className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${fatigueStrategy === item.id
-                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
+                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
                       }`}
                   >
                     <div>{item.label}</div>
@@ -279,8 +279,8 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                     key={item.id}
                     onClick={() => setLakeCondition(item.id as any)}
                     className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${lakeCondition === item.id
-                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                        : 'bg-slate-950 text-slate-400 border-slate-800'
+                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                      : 'bg-slate-950 text-slate-400 border-slate-800'
                       }`}
                   >
                     {item.label}

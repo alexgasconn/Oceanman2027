@@ -35,6 +35,7 @@ export interface SwimActivity {
   maxHeartRate?: number;
   calories?: number;
   poolLength?: number | null;
+  poolDistanceCorrection?: 'historical-20m';
   waterTemp?: number; // °C
   hasWetsuit?: boolean;
   notes?: string;
