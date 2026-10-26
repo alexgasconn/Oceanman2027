@@ -1,5 +1,5 @@
 import React from 'react';
-import { Waves, Upload, Activity, ShieldCheck, Clock, Compass, Dumbbell, TrendingUp } from 'lucide-react';
+import { Waves, Upload, Activity, ShieldCheck, Compass } from 'lucide-react';
 
 export type ActiveTabType = 'oceanman' | 'telemetry' | 'calculator';
 
@@ -7,7 +7,6 @@ interface HeaderProps {
   activeTab: ActiveTabType;
   setActiveTab: (tab: ActiveTabType) => void;
   onOpenImport: () => void;
-  onOpenAddSwim: () => void;
   totalSwimsCount: number;
   totalKm: number;
 }
@@ -16,7 +15,6 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   onOpenImport,
-  onOpenAddSwim,
   totalSwimsCount,
   totalKm,
 }) => {
@@ -35,10 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="text-left group cursor-pointer focus:outline-none"
             >
               <span className="text-lg font-extrabold tracking-wider bg-gradient-to-r from-cyan-400 via-blue-400 to-teal-300 bg-clip-text text-transparent whitespace-nowrap">
-                AQUAVORTEX
-              </span>
-              <span className="hidden sm:inline-block ml-2 text-xs font-medium text-slate-400 tracking-normal">
-                14K Swim Lab
+                OCEANMAN
               </span>
             </button>
           </div>
@@ -47,51 +42,40 @@ export const Header: React.FC<HeaderProps> = ({
           <nav className="hidden md:flex items-center gap-2 text-sm font-medium">
             <button
               onClick={() => setActiveTab('oceanman')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'oceanman'
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${activeTab === 'oceanman'
                   ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
+                }`}
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>Oceanman 14K Readiness</span>
+              <span>Preparación</span>
             </button>
 
             <button
               onClick={() => setActiveTab('telemetry')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'telemetry'
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${activeTab === 'telemetry'
                   ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
+                }`}
             >
               <Activity className="w-4 h-4" />
-              <span>Telemetría & Sesiones ({totalSwimsCount})</span>
+              <span>Nados ({totalSwimsCount})</span>
             </button>
 
             <button
               onClick={() => setActiveTab('calculator')}
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                activeTab === 'calculator'
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap shrink-0 transition-colors cursor-pointer ${activeTab === 'calculator'
                   ? 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-              }`}
+                }`}
             >
               <Compass className="w-4 h-4" />
-              <span>Estrategia Lago d'Orta 14K</span>
+              <span>Plan 14K</span>
             </button>
           </nav>
 
           {/* Zone 3: 1 primary action button area */}
           <div className="flex items-center gap-2.5 shrink-0">
-            <button
-              onClick={onOpenAddSwim}
-              className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 hover:text-white bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
-            >
-              <Dumbbell className="w-3.5 h-3.5 text-cyan-400" />
-              <span>+ Añadir Nado</span>
-            </button>
-
             <button
               onClick={onOpenImport}
               className="flex items-center gap-2 px-3.5 py-1.5 text-xs font-semibold text-slate-950 bg-gradient-to-r from-cyan-400 to-blue-400 hover:from-cyan-300 hover:to-blue-300 rounded-lg shadow-md shadow-cyan-500/20 transition-all cursor-pointer whitespace-nowrap"
@@ -106,27 +90,24 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="md:hidden flex items-center justify-around border-t border-slate-900 py-2 gap-2 text-xs">
           <button
             onClick={() => setActiveTab('oceanman')}
-            className={`px-3 py-1.5 rounded-md font-semibold whitespace-nowrap shrink-0 ${
-              activeTab === 'oceanman' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
-            }`}
+            className={`px-3 py-1.5 rounded-md font-semibold whitespace-nowrap shrink-0 ${activeTab === 'oceanman' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
+              }`}
           >
-            Readiness 14K
+            Preparación
           </button>
           <button
             onClick={() => setActiveTab('telemetry')}
-            className={`px-3 py-1.5 rounded-md font-semibold whitespace-nowrap shrink-0 ${
-              activeTab === 'telemetry' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
-            }`}
+            className={`px-3 py-1.5 rounded-md font-semibold whitespace-nowrap shrink-0 ${activeTab === 'telemetry' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
+              }`}
           >
-            Telemetría ({totalSwimsCount})
+            Nados ({totalSwimsCount})
           </button>
           <button
             onClick={() => setActiveTab('calculator')}
-            className={`px-3 py-1.5 rounded-md font-semibold whitespace-nowrap shrink-0 ${
-              activeTab === 'calculator' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
-            }`}
+            className={`px-3 py-1.5 rounded-md font-semibold whitespace-nowrap shrink-0 ${activeTab === 'calculator' ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400'
+              }`}
           >
-            Estrategia Lago
+            Plan 14K
           </button>
         </div>
       </div>

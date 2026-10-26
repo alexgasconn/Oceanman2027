@@ -1,20 +1,16 @@
 import React, { useState, useRef } from 'react';
-import { 
-  X, 
-  Upload, 
-  FileText, 
-  CheckCircle2, 
-  AlertCircle, 
-  HelpCircle, 
-  Download, 
-  Archive, 
-  Compass, 
-  Loader2 
+import {
+  X,
+  Upload,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+  Archive,
+  Compass,
+  Loader2
 } from 'lucide-react';
 import { SwimActivity } from '../types/swim.ts';
 import { parseStravaExportFile } from '../utils/stravaExportParser.ts';
-import { parseStravaCsv } from '../utils/swimCalculators.ts';
-import { SAMPLE_STRAVA_CSV_CONTENT } from '../data/mockSwimData.ts';
 
 interface StravaImportModalProps {
   isOpen: boolean;
@@ -39,6 +35,11 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
 
   const handleProcessFile = async (file: File) => {
     setErrorMsg(null);
+    if (!/\.(zip|csv)$/i.test(file.name)) {
+      setParsedPreview(null);
+      setErrorMsg('Selecciona el ZIP de Strava o un archivo activities.csv.');
+      return;
+    }
     setIsProcessing(true);
     setProcessStatus('Iniciando lectura del archivo...');
     setParsedPreview(null);
@@ -75,26 +76,9 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
     }
   };
 
-  const handleDownloadSampleCsv = () => {
-    const blob = new Blob([SAMPLE_STRAVA_CSV_CONTENT], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'activities_sample.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const handleLoadSampleData = () => {
-    const parsed = parseStravaCsv(SAMPLE_STRAVA_CSV_CONTENT);
-    onImportActivities(parsed, 'Export de prueba (10 sesiones reales)');
-    onClose();
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
+      <div
         className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -106,9 +90,7 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Importar Archivo de Strava</h2>
-              <p className="text-xs text-slate-400">
-                Sube tu export para analizar tus sesiones y calcular tu Readiness Oceanman 14K
-              </p>
+              <p className="text-xs text-slate-400">Strava ZIP o activities.csv</p>
             </div>
           </div>
           <button
@@ -127,16 +109,15 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
             onDragLeave={() => setDragActive(false)}
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
-            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
-              dragActive
+            className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${dragActive
                 ? 'border-cyan-400 bg-cyan-950/30'
                 : 'border-slate-800 hover:border-slate-700 bg-slate-950/40'
-            }`}
+              }`}
           >
             <input
               ref={fileInputRef}
               type="file"
-              accept=".zip,.csv,.txt,.gpx,.tcx"
+              accept=".zip,.csv"
               className="hidden"
               onChange={(e) => {
                 if (e.target.files && e.target.files[0]) {
@@ -160,9 +141,6 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
                 <h3 className="text-sm font-bold text-white">
                   Arrastra aquí tu <span className="text-cyan-400 font-mono">export.zip</span> de Strava o <span className="text-cyan-400 font-mono">activities.csv</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-1">
-                  También acepta archivos de travesía directa <span className="font-mono text-slate-300">.GPX</span> o <span className="font-mono text-slate-300">.TCX</span> de Garmin
-                </p>
                 <div className="mt-4 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-slate-800 text-xs text-slate-200 border border-slate-700 hover:bg-slate-700 transition-colors">
                   <Upload className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Explorar archivos de tu equipo</span>
@@ -210,32 +188,6 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
             </div>
           )}
 
-          {/* Step-by-step Strava Guide & Download Sample Button */}
-          <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs text-slate-400">
-            <div className="flex items-start gap-1.5">
-              <HelpCircle className="w-4 h-4 text-slate-500 shrink-0 mt-0.5" />
-              <span>
-                <strong>Cómo exportar en Strava:</strong> En Strava &gt; Configuración &gt; Mi cuenta &gt; Descargar o solicitar archivo. Puedes soltar el ZIP entero tal cual aquí.
-              </span>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={handleLoadSampleData}
-                className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2 transition-colors cursor-pointer"
-              >
-                Cargar CSV de prueba
-              </button>
-              <span className="text-slate-700">·</span>
-              <button
-                onClick={handleDownloadSampleCsv}
-                className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>CSV Ejemplo</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Footer Actions */}
@@ -249,11 +201,10 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
           <button
             onClick={handleConfirmImport}
             disabled={!parsedPreview || parsedPreview.length === 0}
-            className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
-              parsedPreview && parsedPreview.length > 0
+            className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${parsedPreview && parsedPreview.length > 0
                 ? 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20'
                 : 'bg-slate-800 text-slate-600 cursor-not-allowed'
-            }`}
+              }`}
           >
             Importar al Dashboard ({parsedPreview ? parsedPreview.length : 0})
           </button>

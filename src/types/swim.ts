@@ -1,5 +1,5 @@
 /**
- * Types for AQUAVORTEX Swim Telemetry & Oceanman 14K Lab
+ * Types for Oceanman swim readiness and telemetry.
  */
 
 export type SwimActivityType = 'pool' | 'open_water';
@@ -38,7 +38,7 @@ export interface SwimActivity {
   waterTemp?: number; // °C
   hasWetsuit?: boolean;
   notes?: string;
-  source: 'strava_zip' | 'strava_csv' | 'garmin_fit' | 'gpx' | 'tcx' | 'demo' | 'manual';
+  source: 'strava_zip' | 'strava_csv' | 'garmin_fit' | 'gpx' | 'tcx';
   splits?: SwimSplit[];
 }
 
@@ -121,27 +121,27 @@ export interface MandatoryEquipmentCheck {
 export interface OceanmanReadiness {
   overallScore: number; // 0 - 100
   statusLevel: 'Elite Prepared' | 'Ready to Conquer' | 'Solid Progress' | 'High Endurance Gap';
-  
+
   // Specific Window Volumes
   volumeLast14DaysMeters: number;
   volumeLast30DaysMeters: number;
   volumeLast60DaysMeters: number;
   volumeLast90DaysMeters: number;
-  
+
   // Checks and criteria breakdown
   checks: ReadinessCheckItem[];
   passedChecksCount: number;
   totalChecksCount: number;
-  
+
   longestSwimMeters: number;
   longestDurationSec: number;
   openWaterSessionsCount: number;
   openWaterTotalMeters: number;
   coldWaterSessionsCount: number; // ≤ 20°C
-  
+
   avgWeeklyVolumeMeters: number;
   targetWeeklyVolumeMeters: number;
-  
+
   estimatedFinishTimeSec: number;
   estimatedFinishTimeString: string;
   estimatedPacePer100mSec: number;
@@ -158,7 +158,7 @@ export interface OceanmanReadiness {
 
   daysRemaining: number;
   weeksRemaining: number;
-  
+
   nutritionPlan: {
     carbsPerHourGrams: number;
     hydrationMlPerHour: number;

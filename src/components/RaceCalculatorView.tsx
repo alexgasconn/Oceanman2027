@@ -1,13 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Compass, 
-  Clock, 
-  Flame, 
-  Droplet, 
-  Zap, 
-  MapPin, 
-  Sliders, 
-  ShieldCheck, 
+import {
+  Compass,
+  Clock,
+  Flame,
+  Droplet,
+  Zap,
+  MapPin,
+  Sliders,
+  ShieldCheck,
   ArrowRight,
   TrendingUp,
   BatteryCharging,
@@ -16,9 +16,9 @@ import {
   Timer
 } from 'lucide-react';
 import { OceanmanReadiness } from '../types/swim.ts';
-import { 
-  formatDuration, 
-  formatPace, 
+import {
+  formatDuration,
+  formatPace,
   OCEANMAN_DISTANCE_METERS,
   calculateOrtaFeedPauses
 } from '../utils/swimCalculators.ts';
@@ -168,7 +168,7 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
             {/* Target Pace Slider */}
             <div>
               <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-slate-300 font-medium">Ritmo Base en Agua Calma:</span>
+                <span className="text-slate-300 font-medium">Ritmo base, agua calma:</span>
                 <span className="font-mono font-bold text-cyan-400 text-sm">
                   {formatPace(targetPaceSec)}
                 </span>
@@ -176,16 +176,16 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
               <input
                 type="range"
                 min={85}
-                max={130}
+                max={180}
                 step={1}
                 value={targetPaceSec}
                 onChange={(e) => setTargetPaceSec(Number(e.target.value))}
                 className="w-full accent-cyan-500 cursor-pointer"
               />
               <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
-                <span>1:25/100m (Élite)</span>
-                <span>1:40/100m (Sub 4h)</span>
-                <span>2:10/100m</span>
+                <span>1:25</span>
+                <span>2:10</span>
+                <span>3:00 /100m</span>
               </div>
             </div>
 
@@ -202,15 +202,13 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                 </div>
                 <button
                   onClick={() => setWetsuit(prev => !prev)}
-                  className={`w-12 h-6 rounded-full transition-colors p-1 cursor-pointer ${
-                    wetsuit ? 'bg-cyan-500' : 'bg-slate-800'
-                  }`}
+                  className={`w-12 h-6 rounded-full transition-colors p-1 cursor-pointer ${wetsuit ? 'bg-cyan-500' : 'bg-slate-800'
+                    }`}
                   aria-label="Alternar uso de neopreno"
                 >
                   <div
-                    className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                      wetsuit ? 'translate-x-6' : 'translate-x-0'
-                    }`}
+                    className={`w-4 h-4 rounded-full bg-white transition-transform ${wetsuit ? 'translate-x-6' : 'translate-x-0'
+                      }`}
                   />
                 </button>
               </div>
@@ -226,11 +224,10 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                   <button
                     key={strokes}
                     onClick={() => setSightingStrokes(strokes)}
-                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${
-                      sightingStrokes === strokes
+                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${sightingStrokes === strokes
                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
                         : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                    }`}
+                      }`}
                   >
                     c/ {strokes} brazadas
                   </button>
@@ -252,11 +249,10 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                   <button
                     key={item.id}
                     onClick={() => setFatigueStrategy(item.id as any)}
-                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${
-                      fatigueStrategy === item.id
+                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${fatigueStrategy === item.id
                         ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
                         : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                    }`}
+                      }`}
                   >
                     <div>{item.label}</div>
                     <div className="text-[9px] text-slate-500 font-normal">{item.desc}</div>
@@ -279,11 +275,10 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                   <button
                     key={item.id}
                     onClick={() => setLakeCondition(item.id as any)}
-                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${
-                      lakeCondition === item.id
+                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${lakeCondition === item.id
                         ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
                         : 'bg-slate-950 text-slate-400 border-slate-800'
-                    }`}
+                      }`}
                   >
                     {item.label}
                   </button>

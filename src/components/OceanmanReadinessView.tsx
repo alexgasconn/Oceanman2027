@@ -1,22 +1,19 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Trophy, 
-  Clock, 
-  CheckCircle2, 
-  AlertCircle, 
-  Layers, 
-  Zap, 
-  ShieldCheck, 
-  Compass, 
-  Waves, 
-  TrendingUp, 
-  Check, 
+import {
+  Clock,
+  CheckCircle2,
+  AlertCircle,
+  Layers,
+  Zap,
+  Compass,
+  Waves,
+  TrendingUp,
+  Check,
   ArrowRight,
   Thermometer,
   Wind,
   Sun,
   Eye,
-  Info
 } from 'lucide-react';
 import { OceanmanReadiness, SwimActivity, ReadinessCheckItem } from '../types/swim.ts';
 import { formatDistance, formatPace, ORTA_HISTORICAL_CONDITIONS } from '../utils/swimCalculators.ts';
@@ -85,120 +82,20 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
 
   return (
     <div className="space-y-8">
-      {/* Target Status & Cut-off Safety Strip */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 relative overflow-hidden shadow-xl">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className={`p-2.5 rounded-xl border ${
-              readiness.isWithinOfficialCutOff 
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
-                : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
-            }`}>
-              <ShieldCheck className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-white">
-                  OCEANMAN 14K Lago d'Orta · 13 de Junio de 2027
-                </h2>
-                <span className="bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Objetivo Principal
-                </span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Ruta 14.000m: <strong className="text-white">Omegna (Norte) → Lido di Gozzano (Sur)</strong> · Salida: 09:30 AM · Límite oficial: 6h 00m
-              </p>
-            </div>
-          </div>
-
-          <button
-            onClick={onOpenCalculator}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow-md shadow-cyan-900/20 cursor-pointer shrink-0"
-          >
-            <Compass className="w-4 h-4" />
-            <span>Perfil Batimétrico & Mapa D3</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        {/* Official Cut-off Safety Margins */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Km 5.0 (Corte 1 - Ronco)</span>
-              <span className="text-xs font-mono font-bold text-white">Límite: 2h 15m (11:45 AM)</span>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-mono font-bold text-emerald-400">+{readiness.cutOffMarginKm5Min} min</span>
-              <span className="text-[10px] text-slate-500 block">colchón de seguridad</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Km 10.0 (Corte 2 - Buccione)</span>
-              <span className="text-xs font-mono font-bold text-white">Límite: 4h 30m (02:00 PM)</span>
-            </div>
-            <div className="text-right">
-              <span className="text-xs font-mono font-bold text-emerald-400">+{readiness.cutOffMarginKm10Min} min</span>
-              <span className="text-[10px] text-slate-500 block">colchón de seguridad</span>
-            </div>
-          </div>
-
-          <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] uppercase font-bold text-slate-400 block">Km 14.0 Meta (Gozzano)</span>
-              <span className="text-xs font-mono font-bold text-white">Límite: 6h 00m (03:30 PM)</span>
-            </div>
-            <div className="text-right">
-              <span className={`text-xs font-mono font-bold ${
-                readiness.isWithinOfficialCutOff ? 'text-emerald-400' : 'text-rose-400'
-              }`}>
-                +{readiness.cutOffMarginFinishMin} min
-              </span>
-              <span className="text-[10px] text-slate-500 block">colchón en meta</span>
-            </div>
-          </div>
-        </div>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-white">Tu preparación</h2>
+        <button
+          onClick={onOpenCalculator}
+          className="flex items-center gap-1.5 text-xs font-semibold text-cyan-400 hover:text-cyan-300 cursor-pointer"
+        >
+          <Compass className="w-4 h-4" />
+          <span>Plan 14K</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
       </div>
 
       {/* 6-KPI Swimming Performance Telemetry Matrix (Dynamically computed from actual activities) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {/* KPI 1: Readiness Score */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-            <span>Diagnóstico Ready</span>
-            <Trophy className="w-4 h-4 text-amber-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold font-mono text-white tabular-nums">
-              {readiness.overallScore}%
-            </span>
-            <span className="text-[11px] font-semibold text-cyan-400">
-              {readiness.statusLevel}
-            </span>
-          </div>
-          <p className="mt-1 text-[11px] text-slate-400">
-            {readiness.passedChecksCount} de {readiness.totalChecksCount} hitos superados
-          </p>
-        </div>
-
-        {/* KPI 2: Estimated 14K Time */}
-        <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
-          <div className="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-            <span>Tiempo Estimado 14K</span>
-            <Clock className="w-4 h-4 text-cyan-400" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-extrabold font-mono text-cyan-300 tabular-nums">
-              {readiness.estimatedFinishTimeString}
-            </span>
-            <span className="text-[11px] text-slate-500">/ 6h corte</span>
-          </div>
-          <p className="mt-1 text-[11px] text-slate-400">
-            Ritmo carrera: <strong className="text-slate-200">{readiness.estimatedPaceString}</strong>
-          </p>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
 
         {/* KPI 3: Longest Pool Swim */}
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 relative overflow-hidden">
@@ -292,33 +189,29 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
           <div className="flex items-center gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 text-xs shrink-0">
             <button
               onClick={() => setFilterStatus('all')}
-              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${
-                filterStatus === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${filterStatus === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Todos ({readiness.checks.length})
             </button>
             <button
               onClick={() => setFilterStatus('passed')}
-              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${
-                filterStatus === 'passed' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${filterStatus === 'passed' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Superados ({readiness.checks.filter(c => c.status === 'passed').length})
             </button>
             <button
               onClick={() => setFilterStatus('warning')}
-              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${
-                filterStatus === 'warning' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${filterStatus === 'warning' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               En progreso ({readiness.checks.filter(c => c.status === 'warning').length})
             </button>
             <button
               onClick={() => setFilterStatus('pending')}
-              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${
-                filterStatus === 'pending' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1 rounded font-semibold cursor-pointer transition-colors ${filterStatus === 'pending' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Pendientes ({readiness.checks.filter(c => c.status === 'pending').length})
             </button>
@@ -334,13 +227,12 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
             return (
               <div
                 key={check.id}
-                className={`p-4 rounded-xl border transition-all ${
-                  isPassed
+                className={`p-4 rounded-xl border transition-all ${isPassed
                     ? 'bg-slate-950/70 border-emerald-500/30 hover:border-emerald-500/50'
                     : isWarning
-                    ? 'bg-slate-950/70 border-amber-500/30 hover:border-amber-500/50'
-                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
-                }`}
+                      ? 'bg-slate-950/70 border-amber-500/30 hover:border-amber-500/50'
+                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                  }`}
               >
                 {/* Clean Row 1: Header + Status Badge */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -364,13 +256,12 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                   </div>
 
                   <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${
-                      isPassed
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${isPassed
                         ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
                         : isWarning
-                        ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
-                        : 'bg-slate-800/80 border border-slate-700 text-slate-300'
-                    }`}>
+                          ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                          : 'bg-slate-800/80 border border-slate-700 text-slate-300'
+                      }`}>
                       {isPassed ? (
                         <>
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -402,15 +293,13 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                   <div className="flex items-center gap-3 sm:w-1/3">
                     <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                       <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          isPassed ? 'bg-emerald-400' : isWarning ? 'bg-amber-400' : 'bg-cyan-500'
-                        }`}
+                        className={`h-full rounded-full transition-all duration-500 ${isPassed ? 'bg-emerald-400' : isWarning ? 'bg-amber-400' : 'bg-cyan-500'
+                          }`}
                         style={{ width: `${Math.min(100, Math.max(4, check.score))}%` }}
                       />
                     </div>
-                    <span className={`font-mono text-xs font-bold tabular-nums shrink-0 ${
-                      isPassed ? 'text-emerald-400' : isWarning ? 'text-amber-400' : 'text-slate-400'
-                    }`}>
+                    <span className={`font-mono text-xs font-bold tabular-nums shrink-0 ${isPassed ? 'text-emerald-400' : isWarning ? 'text-amber-400' : 'text-slate-400'
+                      }`}>
                       {check.score}%
                     </span>
                   </div>
@@ -424,11 +313,10 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                       check.milestones.map((ms, idx) => (
                         <div
                           key={idx}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition-colors ${
-                            ms.isCompleted
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition-colors ${ms.isCompleted
                               ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 font-medium'
                               : 'bg-slate-900/60 border-slate-800 text-slate-400'
-                          }`}
+                            }`}
                         >
                           {ms.isCompleted ? (
                             <Check className="w-3 h-3 text-emerald-400 shrink-0" />
@@ -489,11 +377,10 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
               <div
                 key={cond.id}
                 onClick={() => setSelectedEnvCategory(isSelected ? null : cond.category)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                  isSelected
+                className={`p-4 rounded-xl border transition-all cursor-pointer ${isSelected
                     ? 'bg-slate-950 border-cyan-400 ring-1 ring-cyan-400/50'
                     : 'bg-slate-950/60 border-slate-800 hover:border-slate-700'
-                }`}
+                  }`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2.5">

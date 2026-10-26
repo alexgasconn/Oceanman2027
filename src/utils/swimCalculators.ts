@@ -1,12 +1,12 @@
 /**
- * Pure calculation utilities for AQUAVORTEX Swim Telemetry & Oceanman 14K Lab
+ * Pure calculation utilities for Oceanman swim readiness.
  */
-import { 
-  OceanmanMilestone, 
-  OceanmanReadiness, 
-  ReadinessCheckItem, 
-  HistoricalReadinessPoint, 
-  SwimActivity, 
+import {
+  OceanmanMilestone,
+  OceanmanReadiness,
+  ReadinessCheckItem,
+  HistoricalReadinessPoint,
+  SwimActivity,
   WeeklyMileage,
   OrtaEnvironmentalCondition
 } from '../types/swim.ts';
@@ -25,6 +25,46 @@ export function formatPace(secondsPer100m: number): string {
   const mins = Math.floor(secondsPer100m / 60);
   const secs = Math.round(secondsPer100m % 60);
   return `${mins}:${secs < 10 ? '0' : ''}${secs}/100m`;
+}
+
+export function findPaceOutlierIds(activities: SwimActivity[]): string[] {
+  const medianOf = (values: number[]) => {
+    const middle = Math.floor(values.length / 2);
+    return values.length % 2
+      ? values[middle]
+      : (values[middle - 1] + values[middle]) / 2;
+  };
+  const groups = new Map<SwimActivity['type'], SwimActivity[]>();
+  activities.forEach(activity => {
+    const group = groups.get(activity.type) || [];
+    group.push(activity);
+    groups.set(activity.type, group);
+  });
+
+  return Array.from(groups.values()).flatMap(group => {
+    const paces = group
+      .filter(activity => Number.isFinite(activity.pacePer100m) && activity.pacePer100m > 0)
+      .map(activity => ({ id: activity.id, pace: activity.pacePer100m }))
+      .sort((a, b) => a.pace - b.pace);
+    if (paces.length < 5) return [];
+
+    const values = paces.map(item => item.pace);
+    const median = medianOf(values);
+    const mad = medianOf(values.map(value => Math.abs(value - median)).sort((a, b) => a - b));
+    const lowerHalf = values.slice(0, Math.floor(values.length / 2));
+    const upperHalf = values.slice(Math.ceil(values.length / 2));
+    const interquartileRange = medianOf(upperHalf) - medianOf(lowerHalf);
+
+    return paces
+      .filter(({ pace }) => {
+        if (mad > 0) return 0.6745 * Math.abs(pace - median) / mad > 3.5;
+        if (interquartileRange > 0) {
+          return pace < median - 3 * interquartileRange || pace > median + 3 * interquartileRange;
+        }
+        return Math.abs(pace - median) > median * 0.5;
+      })
+      .map(item => item.id);
+  });
 }
 
 /**
@@ -165,7 +205,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
   if (lines.length < 2) return [];
 
   const headers = lines[0].split(',').map(h => String(h || '').trim().replace(/^["']|["']$/g, '').toLowerCase());
-  
+
   const idIdx = headers.findIndex(h => h && (h.includes('activity id') || h === 'id'));
   const dateIdx = headers.findIndex(h => h && (h.includes('date') || h.includes('start time') || h.includes('hora')));
   const titleIdx = headers.findIndex(h => h && (h.includes('activity name') || h.includes('title') || h.includes('nombre') || h.includes('name')));
@@ -174,12 +214,12 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
 
   // Precise detection of moving time vs elapsed time in Strava exports
   const movingTimeIdx = headers.findIndex(h => h && (
-    h === 'moving time' || h.includes('moving time') || 
+    h === 'moving time' || h.includes('moving time') ||
     h === 'tiempo en movimiento' || h.includes('en movimiento')
   ));
   const elapsedTimeIdx = headers.findIndex(h => h && (
-    h === 'elapsed time' || h.includes('elapsed time') || 
-    h === 'tiempo transcurrido' || h.includes('transcurrido') || 
+    h === 'elapsed time' || h.includes('elapsed time') ||
+    h === 'tiempo transcurrido' || h.includes('transcurrido') ||
     h === 'tiempo total'
   ));
   const genericTimeIdx = headers.findIndex(h => h && (
@@ -235,13 +275,13 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
     // Safe column extraction
     const rawType = (typeIdx >= 0 && typeIdx < cols.length) ? cols[typeIdx] : '';
     const normType = normalizeText(rawType);
-    
+
     // STRICT RULE: Only consider Activity Type = Swim (ignoring Run, Ride, etc.)
-    const isSwim = normType === 'swim' || 
-                   normType === 'open water swim' || 
-                   normType.includes('swim') || 
-                   normType.includes('nataci') || 
-                   typeIdx === -1;
+    const isSwim = normType === 'swim' ||
+      normType === 'open water swim' ||
+      normType.includes('swim') ||
+      normType.includes('nataci') ||
+      typeIdx === -1;
 
     if (!isSwim) continue;
 
@@ -378,7 +418,7 @@ export function getWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
     const pastDaysOfYear = (d.getTime() - startOfYear.getTime()) / 86400000;
     const weekNum = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
     const weekKey = `${d.getFullYear()}-W${weekNum < 10 ? '0' : ''}${weekNum}`;
-    
+
     const monthShort = d.toLocaleDateString('es-ES', { month: 'short' });
     const label = `Sem ${weekNum} · ${monthShort}`;
 
@@ -523,8 +563,8 @@ export function evaluateReadinessChecks(
   const maxPoolDistMeters = poolSwims.length > 0 ? Math.max(...poolSwims.map(a => a.distance)) : 0;
   const maxPoolKm = Number((maxPoolDistMeters / 1000).toFixed(2));
   const earliestPool = poolSwims.length > 0 ? poolSwims[poolSwims.length - 1] : null;
-  const poolBaseline = earliestPool 
-    ? `Primera sesión: ${formatDistance(earliestPool.distance)} (${earliestPool.date}) a ${formatPace(earliestPool.pacePer100m)}` 
+  const poolBaseline = earliestPool
+    ? `Primera sesión: ${formatDistance(earliestPool.distance)} (${earliestPool.date}) a ${formatPace(earliestPool.pacePer100m)}`
     : 'Sin sesiones de piscina registradas todavía';
 
   const check1M1Passed = maxPoolKm >= 6.0;
@@ -564,8 +604,8 @@ export function evaluateReadinessChecks(
   const maxOwDistMeters = owSwims.length > 0 ? Math.max(...owSwims.map(a => a.distance)) : 0;
   const maxOwKm = Number((maxOwDistMeters / 1000).toFixed(2));
   const earliestOw = owSwims.length > 0 ? owSwims[owSwims.length - 1] : null;
-  const owBaseline = earliestOw 
-    ? `Primera salida: ${formatDistance(earliestOw.distance)} (${earliestOw.date}) a ${formatPace(earliestOw.pacePer100m)}` 
+  const owBaseline = earliestOw
+    ? `Primera salida: ${formatDistance(earliestOw.distance)} (${earliestOw.date}) a ${formatPace(earliestOw.pacePer100m)}`
     : 'Sin sesiones de aguas abiertas con elevación GPS detectada';
 
   const check2M1Passed = maxOwKm >= 5.0;
@@ -603,8 +643,8 @@ export function evaluateReadinessChecks(
   const vol14d = getVolumeInWindowDays(activities, 14, referenceDate);
   const vol30d = getVolumeInWindowDays(activities, 30, referenceDate);
   const weeklyData = getWeeklyMileage(activities);
-  const avgWeeklyKm = weeklyData.length > 0 
-    ? Number((weeklyData.reduce((s, w) => s + w.distanceMeters, 0) / weeklyData.length / 1000).toFixed(1)) 
+  const avgWeeklyKm = weeklyData.length > 0
+    ? Number((weeklyData.reduce((s, w) => s + w.distanceMeters, 0) / weeklyData.length / 1000).toFixed(1))
     : 0;
   const recentWeeklyKm = Number((vol14d / 2000).toFixed(1));
   const monthlyKm = Number((vol30d / 1000).toFixed(1));
@@ -696,8 +736,8 @@ export function evaluateReadinessChecks(
     title: 'Check 5: Test de Nutrición e Hidratación en Agua',
     shortTitle: 'Nutrición en Agua',
     description: 'Ensayar la toma de geles (30-60 g CH/h) y sales en agua cada 45 min sin detenerse en tierra.',
-    baseline: nutritionCount > 0 
-      ? `${nutritionCount} sesión(es) de larga duración o con ensayo nutricional registradas` 
+    baseline: nutritionCount > 0
+      ? `${nutritionCount} sesión(es) de larga duración o con ensayo nutricional registradas`
       : 'Sin ensayos de nutrición prolongada en agua detectados',
     milestones: [
       { level: 'Hito 1 (Primer Ensayo)', label: 'Hito 1', target: '1 sesión > 2h 30m ensayando geles/sales', isCompleted: check5M1Passed },
@@ -739,8 +779,8 @@ export function evaluateReadinessChecks(
     title: 'Check 6: Test de Ritmo CSS y Resistencia al Fade',
     shortTitle: 'Ritmo & Fade',
     description: 'Sostener ritmo crucero continuo (~2:00–2:15/100m) evitando caídas de eficiencia en fatiga acumulada.',
-    baseline: longSwimsWithSplits.length > 0 
-      ? `Deriva observada en tiradas largas: +${avgFadePct}% entre primer y último km` 
+    baseline: longSwimsWithSplits.length > 0
+      ? `Deriva observada en tiradas largas: +${avgFadePct}% entre primer y último km`
       : 'Pendiente de registrar sesiones largas con datos de splits por km',
     milestones: [
       { level: 'Hito 1 (Control de Ritmo)', label: 'Hito 1', target: 'Test de series largas o umbral (ej. 5x400m o 4x600m)', isCompleted: check6M1Passed },
@@ -778,8 +818,8 @@ export function evaluateReadinessChecks(
     title: 'Check 7: Travesías de Competición (Simulacros Oficiales)',
     shortTitle: 'Travesías Oficiales',
     description: 'Experiencia en eventos masivos oficiales (> 5 km) con boyas de giro, neopreno y avituallamiento.',
-    baseline: compCount > 0 
-      ? `${compCount} travesía(s) en aguas abiertas de ≥ 4k registrada(s) en Strava` 
+    baseline: compCount > 0
+      ? `${compCount} travesía(s) en aguas abiertas de ≥ 4k registrada(s) en Strava`
       : 'Sin travesías de media/larga distancia registradas todavía',
     milestones: [
       { level: 'Hito 1 (Simulacro 1)', label: 'Hito 1', target: '1 travesía oficial de 3k – 5k completada', isCompleted: check7M1Passed },
@@ -985,7 +1025,7 @@ export function calculateOceanmanReadiness(
       },
       worldSlotEligibility: 'Top 10 en Grupo de Edad clasifica a la Final Mundial.',
       strengths: [],
-      recommendations: ['Carga tu archivo de Strava o activa el Perfil Demo para calcular tu readiness.'],
+      recommendations: ['Importa tus nados de Strava para calcular tu preparación.'],
       milestones: [],
       historicalEvolution: [],
     };
@@ -1260,13 +1300,13 @@ export interface OrtaFeedStationAnalysis {
   officialCutOffSec: number;
   officialCutOffString: string;
   officialCutOffClock: string;
-  
+
   // Projected arrival & departure
   estimatedArrivalSec: number;
   estimatedArrivalClock: string;
   marginBeforeCutoffMin: number;
   isCutoffSafe: boolean;
-  
+
   // Dynamic Pause & Rest Model
   recommendedPauseSec: number;
   recommendedPauseString: string;

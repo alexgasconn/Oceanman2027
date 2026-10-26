@@ -4,6 +4,7 @@ import {
   formatPace,
   formatDuration,
   formatDistance,
+  findPaceOutlierIds,
   calculateDPS,
   calculateStrokeIndex,
   calculateSWOLF,
@@ -31,6 +32,21 @@ test('formatDistance formats meters and kilometers', () => {
   assert.equal(formatDistance(14000), '14.0 km');
   assert.equal(formatDistance(3200), '3.200 m');
   assert.equal(formatDistance(3200, 'km'), '3.2 km');
+});
+
+test('findPaceOutlierIds flags only extreme fast and slow paces', () => {
+  const activities: SwimActivity[] = [70, 99, 100, 101, 102, 103, 190].map((pace, index) => ({
+    id: `pace-${index}`,
+    date: '2026-10-01',
+    title: `Swim ${index}`,
+    type: 'open_water',
+    distance: 3000,
+    pacePer100m: pace,
+    source: 'strava_csv',
+  }));
+
+  assert.deepEqual(findPaceOutlierIds(activities), ['pace-0', 'pace-6']);
+  assert.deepEqual(findPaceOutlierIds(activities.slice(0, 4)), []);
 });
 
 test('calculateDPS computes distance per stroke properly', () => {
@@ -62,7 +78,7 @@ test('parseStravaCsv parses CSV format into valid swim activities', () => {
 
   const parsed = parseStravaCsv(sampleCsv);
   assert.equal(parsed.length, 3); // 3 swims, ignoring the bike ride
-  
+
   const openWater = parsed.find(a => a.id === '1003');
   assert.ok(openWater);
   assert.equal(openWater?.type, 'open_water');
@@ -82,7 +98,7 @@ test('getWeeklyMileage groups swimming volume by week', () => {
       elapsedTime: 3200,
       movingTime: 3000,
       pacePer100m: 100,
-      source: 'demo',
+      source: 'strava_csv',
     },
     {
       id: '2',
@@ -93,7 +109,7 @@ test('getWeeklyMileage groups swimming volume by week', () => {
       elapsedTime: 4200,
       movingTime: 4000,
       pacePer100m: 100,
-      source: 'demo',
+      source: 'strava_csv',
     },
   ];
 
@@ -120,7 +136,7 @@ test('calculateOceanmanReadiness computes readiness score and projections', () =
       averageCadence: 64,
       dps: 1.85,
       waterTemp: 19.0,
-      source: 'demo',
+      source: 'strava_csv',
     },
     {
       id: '2',
@@ -133,7 +149,7 @@ test('calculateOceanmanReadiness computes readiness score and projections', () =
       pacePer100m: 100,
       averageCadence: 66,
       dps: 1.8,
-      source: 'demo',
+      source: 'strava_csv',
     },
   ];
 
@@ -148,9 +164,9 @@ test('calculateOceanmanReadiness computes readiness score and projections', () =
 
 test('calculateHistoricalReadiness produces chronological points with progression', () => {
   const activities: SwimActivity[] = [
-    { id: '1', date: '2026-06-01', title: 'S1', type: 'pool', distance: 3000, elapsedTime: 3000, movingTime: 3000, pacePer100m: 100, source: 'demo' },
-    { id: '2', date: '2026-07-01', title: 'S2', type: 'open_water', distance: 5000, elapsedTime: 5000, movingTime: 5000, pacePer100m: 100, source: 'demo' },
-    { id: '3', date: '2026-08-01', title: 'S3', type: 'open_water', distance: 8000, elapsedTime: 8000, movingTime: 8000, pacePer100m: 100, source: 'demo' },
+    { id: '1', date: '2026-06-01', title: 'S1', type: 'pool', distance: 3000, elapsedTime: 3000, movingTime: 3000, pacePer100m: 100, source: 'strava_csv' },
+    { id: '2', date: '2026-07-01', title: 'S2', type: 'open_water', distance: 5000, elapsedTime: 5000, movingTime: 5000, pacePer100m: 100, source: 'strava_csv' },
+    { id: '3', date: '2026-08-01', title: 'S3', type: 'open_water', distance: 8000, elapsedTime: 8000, movingTime: 8000, pacePer100m: 100, source: 'strava_csv' },
   ];
 
   const points = calculateHistoricalReadiness(activities, 'monthly');
