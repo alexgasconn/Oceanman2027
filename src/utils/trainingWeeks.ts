@@ -7,7 +7,7 @@ function dateKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
-export function getTrainingWorkWeek(value: string | Date): TrainingWorkWeek | null {
+function parseLocalDate(value: string | Date): Date | null {
   let date: Date;
   if (typeof value === 'string') {
     const [year, month, day] = value.slice(0, 10).split('-').map(Number);
@@ -17,18 +17,29 @@ export function getTrainingWorkWeek(value: string | Date): TrainingWorkWeek | nu
     date = new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12);
   }
 
-  if (Number.isNaN(date.getTime()) || date.getDay() === 0 || date.getDay() === 6) return null;
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function getCalendarWeek(value: string | Date): TrainingWorkWeek | null {
+  const date = parseLocalDate(value);
+  if (!date) return null;
 
   const monday = new Date(date);
   monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  const friday = new Date(monday);
-  friday.setDate(friday.getDate() + 4);
+  const sunday = new Date(monday);
+  sunday.setDate(sunday.getDate() + 6);
   const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
 
   return {
     key: dateKey(monday),
-    label: `${monday.toLocaleDateString('es-ES', options)}–${friday.toLocaleDateString('es-ES', options)}`,
+    label: `${monday.toLocaleDateString('es-ES', options)}–${sunday.toLocaleDateString('es-ES', options)}`,
   };
+}
+
+export function getTrainingWorkWeek(value: string | Date): TrainingWorkWeek | null {
+  const date = parseLocalDate(value);
+  if (!date || date.getDay() === 0 || date.getDay() === 6) return null;
+  return getCalendarWeek(date);
 }
 
 export function getRecentCompletedTrainingWeeks(referenceDate: Date, count: number): TrainingWorkWeek[] {

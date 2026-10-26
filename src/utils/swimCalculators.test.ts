@@ -10,6 +10,7 @@ import {
   calculateSWOLF,
   parseStravaCsv,
   recalculateSwimMetrics,
+  getCalendarWeeklyMileage,
   getWeeklyMileage,
   evaluateReadinessChecks,
   calculateOceanmanReadiness,
@@ -250,6 +251,20 @@ test('getWeeklyMileage groups Monday to Friday and excludes weekend swims', () =
   assert.equal(weekly[0].weekKey, '2026-10-26');
   assert.equal(weekly[0].distanceMeters, 3000);
   assert.equal(weekly[0].sessionsCount, 2);
+});
+
+test('getCalendarWeeklyMileage includes open-water swims on weekends', () => {
+  const activities: SwimActivity[] = [
+    { id: 'fri', date: '2026-10-30', title: 'Friday', type: 'pool', distance: 2000, elapsedTime: 1200, movingTime: 1200, pacePer100m: 60, source: 'strava_csv' },
+    { id: 'sat', date: '2026-10-31', title: 'Saturday', type: 'open_water', distance: 4000, elapsedTime: 2400, movingTime: 2400, pacePer100m: 60, source: 'strava_csv' },
+    { id: 'sun', date: '2026-11-01', title: 'Sunday', type: 'open_water', distance: 3000, elapsedTime: 1800, movingTime: 1800, pacePer100m: 60, source: 'strava_csv' },
+  ];
+
+  const weekly = getCalendarWeeklyMileage(activities);
+  assert.equal(weekly.length, 1);
+  assert.equal(weekly[0].weekKey, '2026-10-26');
+  assert.equal(weekly[0].distanceMeters, 9000);
+  assert.equal(weekly[0].openWaterDistanceKm, 7);
 });
 
 test('calculateOceanmanReadiness computes readiness score and projections', () => {

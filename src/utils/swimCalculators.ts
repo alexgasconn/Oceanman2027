@@ -10,7 +10,7 @@ import {
   WeeklyMileage,
   OrtaEnvironmentalCondition
 } from '../types/swim.ts';
-import { getRecentCompletedTrainingWeeks, getTrainingWorkWeek } from './trainingWeeks.ts';
+import { getCalendarWeek, getRecentCompletedTrainingWeeks, getTrainingWorkWeek } from './trainingWeeks.ts';
 function parseCsvRows(csvText: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -411,7 +411,10 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
 /**
  * Group activities by calendar week to assess volume progression
  */
-export function getWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
+function getMileageByWeek(
+  activities: SwimActivity[],
+  getWeek: typeof getTrainingWorkWeek,
+): WeeklyMileage[] {
   if (!activities || activities.length === 0) return [];
 
   const map = new Map<string, {
@@ -426,10 +429,10 @@ export function getWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
   }>();
 
   for (const act of activities) {
-    const workWeek = getTrainingWorkWeek(act.date);
-    if (!workWeek) continue;
-    const weekKey = workWeek.key;
-    const label = workWeek.label;
+    const week = getWeek(act.date);
+    if (!week) continue;
+    const weekKey = week.key;
+    const label = week.label;
 
     const current = map.get(weekKey) || {
       label,
@@ -476,6 +479,14 @@ export function getWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
       avgCadence: avgCad,
     };
   });
+}
+
+export function getWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
+  return getMileageByWeek(activities, getTrainingWorkWeek);
+}
+
+export function getCalendarWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
+  return getMileageByWeek(activities, getCalendarWeek);
 }
 
 /**

@@ -12,7 +12,8 @@ import {
   Layers
 } from 'lucide-react';
 import { SwimActivity } from '../types/swim.ts';
-import { formatPace, formatDistance, formatDuration, getWeeklyMileage } from '../utils/swimCalculators.ts';
+import { formatPace, formatDistance, formatDuration, getCalendarWeeklyMileage } from '../utils/swimCalculators.ts';
+import { getCalendarWeek } from '../utils/trainingWeeks.ts';
 
 interface EvolutionTelemetryViewProps {
   activities: SwimActivity[];
@@ -24,6 +25,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   onSelectActivity,
 }) => {
   const [metricTab, setMetricTab] = useState<'pace' | 'cadence' | 'dps' | 'swolf'>('pace');
+  const [timeGrouping, setTimeGrouping] = useState<'weekly' | 'monthly'>('weekly');
   const [typeFilter, setTypeFilter] = useState<'all' | 'open_water' | 'pool'>('all');
   const [minDistFilter, setMinDistFilter] = useState<number>(0);
   const [hoveredPoint, setHoveredPoint] = useState<SwimActivity | null>(null);
@@ -44,8 +46,36 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
 
   // Weekly mileage
   const weeklyData = useMemo(() => {
-    return getWeeklyMileage(filteredActivities);
+    return getCalendarWeeklyMileage(filteredActivities);
   }, [filteredActivities]);
+
+  const groupedActivities = useMemo(() => {
+    const groups = new Map<string, { label: string; activities: SwimActivity[] }>();
+
+    for (const activity of chronological) {
+      const date = new Date(`${activity.date.slice(0, 10)}T12:00:00`);
+      if (Number.isNaN(date.getTime())) continue;
+
+      let key: string;
+      let label: string;
+      if (timeGrouping === 'weekly') {
+        const week = getCalendarWeek(activity.date);
+        if (!week) continue;
+        key = week.key;
+        const monday = new Date(`${week.key}T12:00:00`);
+        label = monday.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+      } else {
+        key = activity.date.slice(0, 7);
+        label = date.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' });
+      }
+
+      const group = groups.get(key) || { label, activities: [] };
+      group.activities.push(activity);
+      groups.set(key, group);
+    }
+
+    return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
+  }, [chronological, timeGrouping]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -82,29 +112,32 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   const innerHeight = chartHeight - padding.top - padding.bottom;
 
   const dataPoints = useMemo(() => {
-    if (chronological.length < 2) return [];
+    if (groupedActivities.length === 0) return [];
 
-    let values: number[] = [];
-    if (metricTab === 'pace') {
-      values = chronological.map(a => a.pacePer100m);
-    } else if (metricTab === 'cadence') {
-      values = chronological.map(a => a.averageCadence || 62);
-    } else if (metricTab === 'dps') {
-      values = chronological.map(a => a.dps || 1.6);
-    } else {
-      values = chronological.map(a => a.swolf || 75);
-    }
+    const values = groupedActivities.map(({ activities: sessions }) => {
+      if (metricTab === 'pace') {
+        const distance = sessions.reduce((sum, activity) => sum + activity.distance, 0);
+        const movingTime = sessions.reduce((sum, activity) => sum + activity.movingTime, 0);
+        return distance > 0 ? (movingTime / distance) * 100 : 0;
+      }
+
+      const metrics = sessions.map(activity => {
+        if (metricTab === 'cadence') return activity.averageCadence || 62;
+        if (metricTab === 'dps') return activity.dps || 1.6;
+        return activity.swolf || 75;
+      });
+      return metrics.reduce((sum, value) => sum + value, 0) / metrics.length;
+    });
 
     const minVal = Math.min(...values);
     const maxVal = Math.max(...values);
     const valRange = maxVal - minVal || 1;
 
-    return chronological.map((act, index) => {
-      const x = padding.left + (index / (chronological.length - 1)) * innerWidth;
-      let val = act.pacePer100m;
-      if (metricTab === 'cadence') val = act.averageCadence || 62;
-      else if (metricTab === 'dps') val = act.dps || 1.6;
-      else if (metricTab === 'swolf') val = act.swolf || 75;
+    return groupedActivities.map((group, index) => {
+      const x = groupedActivities.length === 1
+        ? padding.left + innerWidth / 2
+        : padding.left + (index / (groupedActivities.length - 1)) * innerWidth;
+      const val = values[index];
 
       // Note: For Pace and SWOLF, lower is faster/better, so we invert or display intuitively
       let yNormalized = (val - minVal) / valRange;
@@ -115,13 +148,15 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
       const y = padding.top + innerHeight - yNormalized * innerHeight;
 
       return {
-        act,
+        act: group.activities[group.activities.length - 1],
+        label: group.label,
+        sessionCount: group.activities.length,
         val,
         x,
         y,
       };
     });
-  }, [chronological, metricTab, innerWidth, innerHeight, padding]);
+  }, [groupedActivities, metricTab, innerWidth, innerHeight, padding]);
 
   // Generate SVG path for trend
   const svgPath = useMemo(() => {
@@ -291,6 +326,24 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
               <option value={8000}>≥ 8.000m (ultra tests)</option>
             </select>
           </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-slate-400">Agrupar:</span>
+            <div className="flex items-center gap-1 rounded-md border border-slate-800 bg-slate-950 p-0.5">
+              <button
+                onClick={() => setTimeGrouping('weekly')}
+                className={`rounded px-2.5 py-1 font-semibold ${timeGrouping === 'weekly' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Semana
+              </button>
+              <button
+                onClick={() => setTimeGrouping('monthly')}
+                className={`rounded px-2.5 py-1 font-semibold ${timeGrouping === 'monthly' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Mes
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* SVG Telemetry Canvas */}
@@ -354,6 +407,16 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                   </g>
                 );
               })}
+
+              {dataPoints.map((pt, index) => {
+                const labelInterval = Math.max(1, Math.ceil(dataPoints.length / 6));
+                if (index % labelInterval !== 0 && index !== dataPoints.length - 1) return null;
+                return (
+                  <text key={`label-${pt.label}`} x={pt.x} y={chartHeight - 8} textAnchor="middle" fill="#94a3b8" fontSize="10">
+                    {pt.label}
+                  </text>
+                );
+              })}
             </svg>
           </div>
         </div>
@@ -407,8 +470,9 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
 
         <div className="space-y-3">
           {weeklyData.slice(-12).map((w, idx) => {
-            const pctOfTarget = Math.min(100, (w.distanceKm / 20) * 100);
-            const isMet = w.distanceKm >= 20;
+            const totalBarWidth = Math.min(100, (w.distanceKm / 20) * 100);
+            const openWaterBarWidth = w.distanceKm > 0 ? totalBarWidth * (w.openWaterDistanceKm / w.distanceKm) : 0;
+            const poolBarWidth = totalBarWidth - openWaterBarWidth;
 
             return (
               <div key={idx} className="space-y-1">
@@ -428,12 +492,12 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                 <div className="w-full h-3 bg-slate-950 rounded-full overflow-hidden flex border border-slate-800/80">
                   <div
                     className="h-full bg-cyan-500 transition-all duration-500"
-                    style={{ width: `${(w.openWaterDistanceKm / 20) * 100}%` }}
+                    style={{ width: `${openWaterBarWidth}%` }}
                     title={`${w.openWaterDistanceKm} km Aguas Abiertas`}
                   />
                   <div
                     className="h-full bg-blue-600 transition-all duration-500"
-                    style={{ width: `${(w.poolDistanceKm / 20) * 100}%` }}
+                    style={{ width: `${poolBarWidth}%` }}
                     title={`${w.poolDistanceKm} km Piscina`}
                   />
                 </div>
