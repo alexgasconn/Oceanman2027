@@ -11,7 +11,7 @@ import { RaceCalculatorView } from './components/RaceCalculatorView.tsx';
 import { StravaImportModal } from './components/StravaImportModal.tsx';
 import { ActivityDetailModal } from './components/ActivityDetailModal.tsx';
 import { SwimActivity } from './types/swim.ts';
-import { calculateOceanmanReadiness, findPaceOutlierIds, parseStravaCsv } from './utils/swimCalculators.ts';
+import { calculateOceanmanReadiness, findPaceOutlierIds, formatPace, parseStravaCsv, recalculateSwimMetrics } from './utils/swimCalculators.ts';
 import { Check, Upload } from 'lucide-react';
 
 const STORAGE_KEY = 'aquavortex_swim_activities';
@@ -24,7 +24,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return parsed.map(recalculateSwimMetrics);
         }
       }
     } catch (e) {
@@ -42,7 +42,7 @@ export default function App() {
 
   const [selectedActivity, setSelectedActivity] = useState<SwimActivity | null>(null);
   const [isImportOpen, setIsImportOpen] = useState(false);
-  const [excludePaceOutliers, setExcludePaceOutliers] = useState(false);
+  const [excludePaceOutliers, setExcludePaceOutliers] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [dataSourceName, setDataSourceName] = useState<string>('Export Strava');
 
@@ -57,7 +57,7 @@ export default function App() {
       })
       .then(csv => {
         if (!isCurrent || localStorage.getItem(STORAGE_KEY) !== null) return;
-        const imported = parseStravaCsv(csv);
+        const imported = parseStravaCsv(csv).map(recalculateSwimMetrics);
         if (imported.length > 0) {
           setActivities(imported);
           setDataSourceName('data/activities.csv');
@@ -83,11 +83,29 @@ export default function App() {
   }, [activities, dataInitialized]);
 
   const paceOutlierIds = useMemo(() => findPaceOutlierIds(activities), [activities]);
+  const paceOutlierIdSet = useMemo(() => new Set(paceOutlierIds), [paceOutlierIds]);
+  const paceOutlierActivities = useMemo(
+    () => activities.filter(activity => paceOutlierIdSet.has(activity.id)),
+    [activities, paceOutlierIdSet]
+  );
+  const paceMedianByType = useMemo(() => {
+    const medians = new Map<SwimActivity['type'], number>();
+    for (const type of ['pool', 'open_water'] as const) {
+      const paces = activities
+        .filter(activity => activity.type === type && activity.pacePer100m > 0)
+        .map(activity => activity.pacePer100m)
+        .sort((a, b) => a - b);
+      if (paces.length === 0) continue;
+      const middle = Math.floor(paces.length / 2);
+      medians.set(type, paces.length % 2 ? paces[middle] : (paces[middle - 1] + paces[middle]) / 2);
+    }
+    return medians;
+  }, [activities]);
   const analysisActivities = useMemo(
     () => excludePaceOutliers
-      ? activities.filter(activity => !paceOutlierIds.includes(activity.id))
+      ? activities.filter(activity => !paceOutlierIdSet.has(activity.id))
       : activities,
-    [activities, excludePaceOutliers, paceOutlierIds]
+    [activities, excludePaceOutliers, paceOutlierIdSet]
   );
 
   // Recalculate readiness reactively whenever activities change - 100% dynamic
@@ -103,11 +121,12 @@ export default function App() {
   };
 
   const handleImportActivities = (newActivities: SwimActivity[], sourceName: string) => {
-    setActivities(newActivities);
+    const normalizedActivities = newActivities.map(recalculateSwimMetrics);
+    setActivities(normalizedActivities);
     setDataInitialized(true);
     setDataSourceName(sourceName);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newActivities));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(normalizedActivities));
     } catch (e) {
       console.warn(e);
     }
@@ -150,16 +169,30 @@ export default function App() {
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              {paceOutlierIds.length > 0 && (
-                <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={excludePaceOutliers}
-                    onChange={(event) => setExcludePaceOutliers(event.target.checked)}
-                    className="accent-cyan-400"
-                  />
-                  <span>Excluir {paceOutlierIds.length} ritmos extremos</span>
-                </label>
+              {paceOutlierActivities.length > 0 && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  <label className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={excludePaceOutliers}
+                      onChange={(event) => setExcludePaceOutliers(event.target.checked)}
+                      className="accent-cyan-400"
+                    />
+                    <span>{excludePaceOutliers ? 'Excluidos' : 'Incluir'} {paceOutlierActivities.length} ritmos extremos</span>
+                  </label>
+                  <details className="relative">
+                    <summary className="cursor-pointer text-cyan-400 hover:text-cyan-300">Ver cuáles</summary>
+                    <ul className="absolute right-0 z-30 mt-2 max-h-64 w-80 overflow-y-auto rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-xl">
+                      {paceOutlierActivities.map(activity => (
+                        <li key={activity.id} className="border-b border-slate-800 px-2 py-1.5 last:border-0">
+                          <span className="font-semibold text-slate-200">{activity.pacePer100m < (paceMedianByType.get(activity.type) ?? activity.pacePer100m) ? 'Rápido' : 'Lento'}</span>
+                          <span className="text-slate-400"> · {formatPace(activity.pacePer100m)}</span>
+                          <span className="block truncate text-[10px] text-slate-500">{activity.date} · {activity.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
               )}
               <button
                 onClick={() => setIsImportOpen(true)}

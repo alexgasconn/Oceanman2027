@@ -10,6 +10,7 @@ import {
   TrendingUp,
   Check,
   ArrowRight,
+  ChevronDown,
   Thermometer,
   Wind,
   Sun,
@@ -165,7 +166,7 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
         </div>
       </div>
 
-      {/* CHECKLIST DE CONTROL DE PREPARACIÓN (7 Checks - Rediseñado sin saturación) */}
+      {/* Readiness checks */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-6">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
@@ -210,122 +211,101 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
           </div>
         </div>
 
-        {/* 7 Streamlined Checks Cards */}
-        <div className="space-y-3.5">
+        <div className="space-y-2">
           {filteredChecks.map((check) => {
             const isPassed = check.status === 'passed';
             const isWarning = check.status === 'warning';
+            const history = readiness.historicalEvolution
+              .map(point => ({ date: point.date, score: point.checkScores?.[check.id] }))
+              .filter((point): point is { date: string; score: number } => point.score !== undefined);
+            const chartWidth = 360;
+            const chartHeight = 76;
+            const points = history.map((point, index) => {
+              const x = history.length === 1 ? chartWidth / 2 : index / (history.length - 1) * chartWidth;
+              const y = chartHeight - point.score / 100 * chartHeight;
+              return { ...point, x, y };
+            });
+            const chartLine = points.map(point => `${point.x},${point.y}`).join(' ');
 
             return (
-              <div
+              <details
                 key={check.id}
-                className={`p-4 rounded-xl border transition-all ${isPassed
-                    ? 'bg-slate-950/70 border-emerald-500/30 hover:border-emerald-500/50'
-                    : isWarning
-                      ? 'bg-slate-950/70 border-amber-500/30 hover:border-amber-500/50'
-                      : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
+                className={`group rounded-lg border transition-colors ${isPassed
+                  ? 'bg-slate-950/70 border-emerald-500/30 hover:border-emerald-500/50'
+                  : isWarning
+                    ? 'bg-slate-950/70 border-amber-500/30 hover:border-amber-500/50'
+                    : 'bg-slate-950/70 border-slate-800 hover:border-slate-700'
                   }`}
               >
-                {/* Clean Row 1: Header + Status Badge */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 font-mono font-bold text-xs flex items-center justify-center shrink-0">
+                <summary className="grid cursor-pointer list-none grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-2 p-3 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-cyan-500/30 bg-cyan-500/10 font-mono text-xs font-bold text-cyan-400">
                       #{check.checkNumber}
                     </span>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="text-sm font-bold text-white">
-                          {check.title}
-                        </h4>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-400">
-                          {check.weight}% peso
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-400 line-clamp-1">
-                        {check.description}
-                      </p>
+                    <div className="min-w-0">
+                      <h4 className="truncate text-sm font-semibold text-white">{check.shortTitle || check.title}</h4>
+                      <span className="text-[10px] text-slate-500">{check.weight}% del índice</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 ${isPassed
-                        ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-                        : isWarning
-                          ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
-                          : 'bg-slate-800/80 border border-slate-700 text-slate-300'
+                  <div className="flex items-center gap-2 justify-self-end">
+                    <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold ${isPassed
+                      ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                      : isWarning
+                        ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
+                        : 'bg-slate-800/80 border border-slate-700 text-slate-300'
                       }`}>
-                      {isPassed ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                          <span>Superado</span>
-                        </>
-                      ) : isWarning ? (
-                        <>
-                          <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
-                          <span>En Progreso</span>
-                        </>
-                      ) : (
-                        <>
-                          <Clock className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Pendiente</span>
-                        </>
-                      )}
+                      {isPassed ? 'Superado' : isWarning ? 'En progreso' : 'Pendiente'}
                     </span>
+                    <span className="font-mono text-xs font-bold tabular-nums text-slate-200">{check.currentValueFormatted}</span>
                   </div>
-                </div>
-
-                {/* Clean Row 2: Progress Bar & Current vs Target */}
-                <div className="mt-3 pt-3 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                  <div className="flex items-center gap-2 font-mono">
-                    <span className="text-slate-400">Progreso actual:</span>
-                    <strong className="text-white text-sm">{check.currentValueFormatted}</strong>
-                    <span className="text-slate-500">/ objetivo {check.targetValueFormatted}</span>
-                  </div>
-
-                  <div className="flex items-center gap-3 sm:w-1/3">
-                    <div className="flex-1 h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${isPassed ? 'bg-emerald-400' : isWarning ? 'bg-amber-400' : 'bg-cyan-500'
-                          }`}
-                        style={{ width: `${Math.min(100, Math.max(4, check.score))}%` }}
-                      />
+                  <div className="col-span-2 flex items-center gap-2 sm:col-span-1 sm:w-48">
+                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+                      <div className={`h-full ${isPassed ? 'bg-emerald-400' : isWarning ? 'bg-amber-400' : 'bg-cyan-500'}`} style={{ width: `${check.score}%` }} />
                     </div>
-                    <span className={`font-mono text-xs font-bold tabular-nums shrink-0 ${isPassed ? 'text-emerald-400' : isWarning ? 'text-amber-400' : 'text-slate-400'
-                      }`}>
-                      {check.score}%
-                    </span>
+                    <span className="w-8 text-right font-mono text-[10px] tabular-nums text-slate-400">{check.score}%</span>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
                   </div>
-                </div>
+                </summary>
 
-                {/* Clean Row 3: Horizontal Milestone Stepper (Hitos de Control) */}
-                <div className="mt-3 pt-2.5 border-t border-slate-800/40">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] font-semibold text-slate-400 shrink-0">Hitos:</span>
-                    {check.milestones && check.milestones.length > 0 ? (
-                      check.milestones.map((ms, idx) => (
-                        <div
-                          key={idx}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] border transition-colors ${ms.isCompleted
-                              ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300 font-medium'
-                              : 'bg-slate-900/60 border-slate-800 text-slate-400'
-                            }`}
-                        >
-                          {ms.isCompleted ? (
-                            <Check className="w-3 h-3 text-emerald-400 shrink-0" />
-                          ) : (
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-600 shrink-0" />
-                          )}
-                          <span className="font-semibold text-slate-300">{ms.label}:</span>
-                          <span>{ms.target}</span>
+                <div className="space-y-3 border-t border-slate-800/70 px-4 pb-4 pt-3">
+                  <p className="text-xs text-slate-300">{check.description}</p>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400">
+                    <span>Actual: <strong className="text-white">{check.currentValueFormatted}</strong></span>
+                    <span>Objetivo: <strong className="text-slate-200">{check.targetValueFormatted}</strong></span>
+                    <span>Base: {check.baseline}</span>
+                  </div>
+
+                  {check.milestones.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {check.milestones.map((milestone, index) => (
+                        <div key={index} className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] ${milestone.isCompleted ? 'border-emerald-500/30 bg-emerald-950/30 text-emerald-300' : 'border-slate-800 bg-slate-900 text-slate-400'}`}>
+                          {milestone.isCompleted && <Check className="h-3 w-3" />}
+                          <span>{milestone.target}</span>
                         </div>
-                      ))
-                    ) : (
-                      <span className="text-[11px] text-slate-400">{check.targetValueFormatted}</span>
-                    )}
-                  </div>
-                </div>
+                      ))}
+                    </div>
+                  )}
 
-              </div>
+                  <div className="rounded-md border border-slate-800 bg-slate-900/70 p-3">
+                    <div className="mb-1 flex items-center justify-between text-[10px] text-slate-400">
+                      <span>Progreso semanal</span>
+                      <span>{history.length ? `${history.length} semanas` : 'Sin histórico suficiente'}</span>
+                    </div>
+                    {points.length > 0 ? (
+                      <svg viewBox={`0 0 ${chartWidth} ${chartHeight + 10}`} className="h-16 w-full" role="img" aria-label={`Progreso histórico: ${check.shortTitle || check.title}`}>
+                        <line x1="0" x2={chartWidth} y1={chartHeight / 2} y2={chartHeight / 2} stroke="#334155" strokeDasharray="3 4" />
+                        <polyline points={chartLine} fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        {points.map(point => <circle key={point.date} cx={point.x} cy={point.y} r="2.5" fill="#67e8f9"><title>{`${point.date}: ${point.score}%`}</title></circle>)}
+                        <text x="0" y={chartHeight + 9} fill="#64748b" fontSize="9">{points[0].date}</text>
+                        <text x={chartWidth} y={chartHeight + 9} textAnchor="end" fill="#64748b" fontSize="9">{points[points.length - 1].date}</text>
+                      </svg>
+                    ) : <p className="text-[11px] text-slate-500">{check.details}</p>}
+                  </div>
+
+                  <p className="text-[11px] text-cyan-200">{check.summary || check.details}</p>
+                </div>
+              </details>
             );
           })}
         </div>

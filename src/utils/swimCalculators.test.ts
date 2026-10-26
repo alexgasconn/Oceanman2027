@@ -9,7 +9,9 @@ import {
   calculateStrokeIndex,
   calculateSWOLF,
   parseStravaCsv,
+  recalculateSwimMetrics,
   getWeeklyMileage,
+  evaluateReadinessChecks,
   calculateOceanmanReadiness,
   calculateHistoricalReadiness,
 } from './swimCalculators.ts';
@@ -71,6 +73,32 @@ test('calculateSWOLF calculates reasonable score', () => {
   assert.ok(swolf >= 95 && swolf <= 115);
 });
 
+test('recalculateSwimMetrics uses a 20m pool before 2025-03-25 only', () => {
+  const baseActivity: SwimActivity = {
+    id: 'pool-history',
+    date: '2025-03-24',
+    title: 'Pool history',
+    type: 'pool',
+    distance: 2000,
+    elapsedTime: 2100,
+    movingTime: 2000,
+    pacePer100m: 100,
+    averageCadence: 64,
+    dps: 1.8,
+    swolf: 100,
+    poolLength: 25,
+    source: 'strava_csv',
+  };
+
+  const corrected = recalculateSwimMetrics(baseActivity);
+  const currentPool = recalculateSwimMetrics({ ...baseActivity, date: '2025-03-25', poolLength: 50 });
+
+  assert.equal(corrected.poolLength, 20);
+  assert.equal(corrected.swolf, calculateSWOLF(corrected.pacePer100m, corrected.dps || 0, 20));
+  assert.equal(currentPool.poolLength, 50);
+  assert.equal(currentPool.swolf, calculateSWOLF(currentPool.pacePer100m, currentPool.dps || 0, 50));
+});
+
 test('parseStravaCsv parses CSV format into valid swim activities', () => {
   const sampleCsv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Average Heart Rate
 1001,"2026-08-15 08:30:00","Entreno Travesía Mar Costa Brava",Swim,3900,3600,3500,138
@@ -87,6 +115,34 @@ test('parseStravaCsv parses CSV format into valid swim activities', () => {
   assert.equal(openWater?.distance, 6000);
   assert.ok(openWater?.pacePer100m && openWater.pacePer100m > 0);
   assert.ok(openWater?.dps && openWater.dps > 0);
+});
+
+test('parseStravaCsv preserves commas, apostrophes, escaped quotes, and multiline cells', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Activity Description,Elapsed Time,Moving Time,Distance
+501,"Oct 26, 2026, 6:18:12 AM","Travesía d'Orta, tramo ""norte""",Swim,"nota con, coma
+segunda línea",3000,2600,"2,000"`;
+
+  const parsed = parseStravaCsv(csv);
+
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].title, "Travesía d'Orta, tramo \"norte\"");
+  assert.equal(parsed[0].distance, 2000);
+  assert.equal(parsed[0].movingTime, 2600);
+});
+
+test('parseStravaCsv recalculates historical pool SWOLF with 20m length', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Pool Length
+old,2025-03-24,Old pool,Swim,2100,2000,2000,25
+current,2025-03-25,Current pool,Swim,2100,2000,2000,50`;
+
+  const parsed = parseStravaCsv(csv);
+  const oldPool = parsed.find(activity => activity.id === 'old');
+  const currentPool = parsed.find(activity => activity.id === 'current');
+
+  assert.equal(oldPool?.poolLength, 20);
+  assert.equal(oldPool?.swolf, calculateSWOLF(oldPool!.pacePer100m, oldPool!.dps || 0, 20));
+  assert.equal(currentPool?.poolLength, 50);
+  assert.equal(currentPool?.swolf, calculateSWOLF(currentPool!.pacePer100m, currentPool!.dps || 0, 50));
 });
 
 test('getWeeklyMileage groups swimming volume by week', () => {
@@ -121,6 +177,21 @@ test('getWeeklyMileage groups swimming volume by week', () => {
   assert.equal(weekly[0].sessionsCount, 2);
   assert.equal(weekly[0].poolDistanceKm, 3);
   assert.equal(weekly[0].openWaterDistanceKm, 4);
+});
+
+test('getWeeklyMileage groups Monday to Friday and excludes weekend swims', () => {
+  const activities: SwimActivity[] = [
+    { id: 'mon', date: '2026-10-26', title: 'Monday', type: 'pool', distance: 1000, elapsedTime: 600, movingTime: 600, pacePer100m: 60, source: 'strava_csv' },
+    { id: 'fri', date: '2026-10-30', title: 'Friday', type: 'open_water', distance: 2000, elapsedTime: 1200, movingTime: 1200, pacePer100m: 60, source: 'strava_csv' },
+    { id: 'sat', date: '2026-10-31', title: 'Saturday', type: 'pool', distance: 3000, elapsedTime: 1800, movingTime: 1800, pacePer100m: 60, source: 'strava_csv' },
+    { id: 'sun', date: '2026-11-01', title: 'Sunday', type: 'pool', distance: 4000, elapsedTime: 2400, movingTime: 2400, pacePer100m: 60, source: 'strava_csv' },
+  ];
+
+  const weekly = getWeeklyMileage(activities);
+  assert.equal(weekly.length, 1);
+  assert.equal(weekly[0].weekKey, '2026-10-26');
+  assert.equal(weekly[0].distanceMeters, 3000);
+  assert.equal(weekly[0].sessionsCount, 2);
 });
 
 test('calculateOceanmanReadiness computes readiness score and projections', () => {
@@ -164,6 +235,22 @@ test('calculateOceanmanReadiness computes readiness score and projections', () =
   assert.ok(readiness.estimatedFinishTimeSec > 0);
 });
 
+test('readiness has ten weighted checks and does not invent long-swim pace consistency', () => {
+  const activities: SwimActivity[] = [
+    { id: 'ow-1', date: '2026-10-12', title: 'Long open water', type: 'open_water', distance: 5000, elapsedTime: 5200, movingTime: 5000, pacePer100m: 100, source: 'strava_csv' },
+    { id: 'pool-1', date: '2026-10-14', title: 'Pool', type: 'pool', distance: 3000, elapsedTime: 3100, movingTime: 3000, pacePer100m: 100, source: 'strava_csv' },
+  ];
+
+  const { checks } = evaluateReadinessChecks(activities, new Date('2026-10-26T12:00:00'));
+  const paceConsistency = checks.find(check => check.id === 'check-6-long-swim-pace-consistency');
+
+  assert.equal(checks.length, 10);
+  assert.equal(checks.reduce((sum, check) => sum + check.weight, 0), 100);
+  assert.equal(paceConsistency?.status, 'pending');
+  assert.equal(paceConsistency?.score, 0);
+  assert.equal(paceConsistency?.currentValueFormatted, 'Datos insuficientes');
+});
+
 test('calculateHistoricalReadiness produces chronological points with progression', () => {
   const activities: SwimActivity[] = [
     { id: '1', date: '2026-06-01', title: 'S1', type: 'pool', distance: 3000, elapsedTime: 3000, movingTime: 3000, pacePer100m: 100, source: 'strava_csv' },
@@ -175,4 +262,5 @@ test('calculateHistoricalReadiness produces chronological points with progressio
   assert.equal(points.length, 3);
   assert.ok(points[0].readinessScore <= points[2].readinessScore);
   assert.ok(points[2].longestSwimKm >= 8);
+  assert.equal(typeof points[2].checkScores?.['check-6-long-swim-pace-consistency'], 'number');
 });

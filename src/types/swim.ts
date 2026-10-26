@@ -34,7 +34,7 @@ export interface SwimActivity {
   avgHeartRate?: number;
   maxHeartRate?: number;
   calories?: number;
-  poolLength?: 25 | 50 | null;
+  poolLength?: number | null;
   waterTemp?: number; // °C
   hasWetsuit?: boolean;
   notes?: string;
@@ -107,6 +107,7 @@ export interface HistoricalReadinessPoint {
   openWaterSessionsTotal: number;
   openWaterKmTotal: number;
   avgPaceSec: number;
+  checkScores?: Record<string, number>;
   milestoneUnlocked?: string;
 }
 

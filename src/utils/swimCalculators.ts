@@ -10,16 +10,48 @@ import {
   WeeklyMileage,
   OrtaEnvironmentalCondition
 } from '../types/swim.ts';
+import { getRecentCompletedTrainingWeeks, getTrainingWorkWeek } from './trainingWeeks.ts';
+function parseCsvRows(csvText: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let insideQuotes = false;
+  const text = csvText.replace(/^\uFEFF/, '');
+
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (character === '"') {
+      if (insideQuotes && text[index + 1] === '"') {
+        field += '"';
+        index++;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+    } else if (character === ',' && !insideQuotes) {
+      row.push(field.trim());
+      field = '';
+    } else if ((character === '\n' || character === '\r') && !insideQuotes) {
+      row.push(field.trim());
+      if (row.some(value => value !== '')) rows.push(row);
+      row = [];
+      field = '';
+      if (character === '\r' && text[index + 1] === '\n') index++;
+    } else {
+      field += character;
+    }
+  }
+
+  row.push(field.trim());
+  if (row.some(value => value !== '')) rows.push(row);
+  return rows;
+}
 
 export const OCEANMAN_DATE = new Date('2027-06-13T09:30:00Z');
 export const OCEANMAN_DISTANCE_METERS = 14000;
 export const OFFICIAL_CUTOFF_TOTAL_SEC = 6 * 3600; // 6h 00m = 21600 seconds
 export const RECOMMENDED_WEEKLY_VOLUME_METERS = 20000; // 20km/week for 14K readiness
 export const RECOMMENDED_LONGEST_SWIM_METERS = 10000; // 10km benchmark test before race
-
-/**
- * Format pace in seconds/100m into "m:ss /100m"
- */
+export const HISTORICAL_POOL_LENGTH_CUTOFF = '2025-03-25';
 export function formatPace(secondsPer100m: number): string {
   if (!secondsPer100m || isNaN(secondsPer100m) || secondsPer100m <= 0) return '--:--';
   const mins = Math.floor(secondsPer100m / 60);
@@ -127,7 +159,29 @@ export function calculateSWOLF(pacePer100mSec: number, dps: number, poolLength: 
   return Math.round(timeForPool + strokesForPool);
 }
 
-/**
+export function recalculateSwimMetrics(activity: SwimActivity): SwimActivity {
+  if (activity.distance <= 0 || activity.movingTime <= 0) return activity;
+
+  const pacePer100m = activity.movingTime / activity.distance * 100;
+  const speedMps = activity.distance / activity.movingTime;
+  const averageCadence = activity.averageCadence || (activity.type === 'open_water' ? 62 : 64);
+  const poolLength = activity.type === 'pool'
+    ? activity.date.slice(0, 10) < HISTORICAL_POOL_LENGTH_CUTOFF ? 20 : activity.poolLength || 25
+    : activity.poolLength ?? null;
+  const dps = calculateDPS(speedMps, averageCadence);
+
+  return {
+    ...activity,
+    pacePer100m: Number(pacePer100m.toFixed(1)),
+    poolLength,
+    averageCadence,
+    totalStrokes: Math.round((activity.movingTime / 60) * averageCadence),
+    dps,
+    swolf: calculateSWOLF(pacePer100m, dps, activity.type === 'open_water' ? 50 : poolLength || 25),
+    strokeIndex: calculateStrokeIndex(speedMps, dps),
+  };
+}
+
 /**
  * Normalize strings stripping diacritics and casing
  */
@@ -201,16 +255,17 @@ export function detectOpenWater(
  */
 export function parseStravaCsv(csvText: string): SwimActivity[] {
   if (!csvText || typeof csvText !== 'string') return [];
-  const lines = csvText.trim().split(/\r?\n/);
-  if (lines.length < 2) return [];
+  const rows = parseCsvRows(csvText);
+  if (rows.length < 2) return [];
 
-  const headers = lines[0].split(',').map(h => String(h || '').trim().replace(/^["']|["']$/g, '').toLowerCase());
+  const headers = rows[0].map(header => String(header || '').trim().toLowerCase());
 
   const idIdx = headers.findIndex(h => h && (h.includes('activity id') || h === 'id'));
   const dateIdx = headers.findIndex(h => h && (h.includes('date') || h.includes('start time') || h.includes('hora')));
   const titleIdx = headers.findIndex(h => h && (h.includes('activity name') || h.includes('title') || h.includes('nombre') || h.includes('name')));
   const typeIdx = headers.findIndex(h => h && (h.includes('activity type') || h.includes('type') || h.includes('tipo')));
   const distIdx = headers.findIndex(h => h && (h.includes('distance') || h.includes('distancia')));
+  const poolLengthIdx = headers.findIndex(h => h && (h === 'pool length' || h.includes('pool length') || h.includes('longitud piscina')));
 
   // Precise detection of moving time vs elapsed time in Strava exports
   const movingTimeIdx = headers.findIndex(h => h && (
@@ -252,25 +307,8 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
 
   const parsedActivities: SwimActivity[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
-    const rawLine = lines[i].trim();
-    if (!rawLine) continue;
-
-    const cols: string[] = [];
-    let insideQuotes = false;
-    let currentVal = '';
-    for (let c = 0; c < rawLine.length; c++) {
-      const char = rawLine[c];
-      if (char === '"' || char === "'") {
-        insideQuotes = !insideQuotes;
-      } else if (char === ',' && !insideQuotes) {
-        cols.push(currentVal.trim().replace(/^["']|["']$/g, ''));
-        currentVal = '';
-      } else {
-        currentVal += char;
-      }
-    }
-    cols.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+  for (let i = 1; i < rows.length; i++) {
+    const cols = rows[i];
 
     // Safe column extraction
     const rawType = (typeIdx >= 0 && typeIdx < cols.length) ? cols[typeIdx] : '';
@@ -348,8 +386,16 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
       elevationLow = parseFloat(cols[elevationLowIdx]) || 0;
     }
 
-    const isOpenWater = (Math.abs(elevationHigh) > 0.05 || Math.abs(elevationLow) > 0.05);
+    const detectedOpenWater = detectOpenWater(rawType, actTitle).isOpenWater;
+    const hasOpenWaterElevation = Math.abs(elevationHigh) > 0.05 || Math.abs(elevationLow) > 0.05;
+    const isOpenWater = detectedOpenWater || hasOpenWaterElevation;
     const activityType: 'open_water' | 'pool' = isOpenWater ? 'open_water' : 'pool';
+    const importedPoolLength = poolLengthIdx >= 0 ? parseFloat(cols[poolLengthIdx]) : Number.NaN;
+    const poolLength = activityType === 'pool'
+      ? actDate < HISTORICAL_POOL_LENGTH_CUTOFF
+        ? 20
+        : Number.isFinite(importedPoolLength) && importedPoolLength > 0 ? importedPoolLength : 25
+      : null;
 
     const pacePer100m = (movingTime / rawDist) * 100; // STRICTLY movingTime
     const speedMps = rawDist / movingTime;
@@ -357,7 +403,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
     const baseCadence = isOpenWater ? 62 : 64;
     const avgCadence = baseCadence + Math.round((speedMps - 1.1) * 10);
     const dps = calculateDPS(speedMps, avgCadence);
-    const swolf = calculateSWOLF(pacePer100m, dps, isOpenWater ? 50 : 25);
+    const swolf = calculateSWOLF(pacePer100m, dps, isOpenWater ? 50 : poolLength || 25);
     const strokeIndex = calculateStrokeIndex(speedMps, dps);
 
     const avgHr = hrIdx >= 0 ? parseInt(cols[hrIdx], 10) || undefined : undefined;
@@ -384,6 +430,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
       strokeIndex,
       avgHeartRate: avgHr,
       calories: cal || Math.round((rawDist / 100) * 28),
+      poolLength,
       waterTemp: isOpenWater ? 19.5 : 27,
       hasWetsuit: isOpenWater,
       source: 'strava_csv',
@@ -411,16 +458,10 @@ export function getWeeklyMileage(activities: SwimActivity[]): WeeklyMileage[] {
   }>();
 
   for (const act of activities) {
-    const d = new Date(act.date);
-    if (isNaN(d.getTime())) continue;
-
-    const startOfYear = new Date(d.getFullYear(), 0, 1);
-    const pastDaysOfYear = (d.getTime() - startOfYear.getTime()) / 86400000;
-    const weekNum = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
-    const weekKey = `${d.getFullYear()}-W${weekNum < 10 ? '0' : ''}${weekNum}`;
-
-    const monthShort = d.toLocaleDateString('es-ES', { month: 'short' });
-    const label = `Sem ${weekNum} · ${monthShort}`;
+    const workWeek = getTrainingWorkWeek(act.date);
+    if (!workWeek) continue;
+    const weekKey = workWeek.key;
+    const label = workWeek.label;
 
     const current = map.get(weekKey) || {
       label,
@@ -593,7 +634,7 @@ export function evaluateReadinessChecks(
     unit: 'km',
     status: check1Status,
     score: check1Score,
-    weight: 15,
+    weight: 12,
     details: maxPoolKm > 0 ? `Máxima sesión en piscina registrada: ${maxPoolKm.toFixed(2)} km.` : 'Registra sesiones de piscina para activar este check.',
     summary: check1M2Passed ? 'Resistencia en piscina sobresaliente.' : check1M1Passed ? 'Hito base 6k superado.' : 'Aumenta tiradas largas en piscina.',
   };
@@ -634,7 +675,7 @@ export function evaluateReadinessChecks(
     unit: 'km',
     status: check2Status,
     score: check2Score,
-    weight: 20,
+    weight: 15,
     details: maxOwKm > 0 ? `Tirada máxima en aguas abiertas: ${maxOwKm.toFixed(2)} km.` : 'Detectadas a partir de altitud GPS no nula.',
     summary: check2M3Passed ? 'Simulacro estrella completado.' : check2M1Passed ? 'Hito 5k superado en aguas vivas.' : 'Planifica tu primer test continuo > 5k.',
   };
@@ -675,7 +716,7 @@ export function evaluateReadinessChecks(
     unit: 'km/sem',
     status: check3Status,
     score: check3Score,
-    weight: 15,
+    weight: 12,
     details: `Volumen reciente: ${recentWeeklyKm} km/sem y ${monthlyKm} km en los últimos 30 días.`,
     summary: check3M3Passed ? 'Volumen pico de gran fondo alcanzado.' : check3M2Passed ? 'Volumen sólido de 15 km/semana.' : 'Incrementar gradualmente el kilometraje semanal.',
   };
@@ -710,7 +751,7 @@ export function evaluateReadinessChecks(
     unit: 'km',
     status: check4Status,
     score: check4Score,
-    weight: 15,
+    weight: 12,
     details: `${totalAccumulatedKm} km acumulados registrados en ${activities.length} sesiones.`,
     summary: check4M3Passed ? 'Base de volumen de más de 600 km completada.' : `Faltan ${(Math.max(0, 600 - totalAccumulatedKm)).toFixed(1)} km para la meta de 600 km.`,
   };
@@ -750,52 +791,52 @@ export function evaluateReadinessChecks(
     unit: 'sesiones',
     status: check5Status,
     score: check5Score,
-    weight: 10,
+    weight: 8,
     details: `${nutritionCount} sesiones con protocolo de larga duración o nutrición completadas.`,
     summary: check5M2Passed ? 'Estrategia nutricional y digestiva validada.' : 'Realizar tiradas > 3h ensayando avituallamientos.',
   };
 
-  // 6. Check 6: Test de Ritmo CSS y Resistencia al Fade
-  const longSwimsWithSplits = activities.filter(a => a.distance >= 2500 && a.splits && a.splits.length >= 3);
-  let avgFadePct = 4.2;
-  if (longSwimsWithSplits.length > 0) {
-    const drifts = longSwimsWithSplits.map(s => {
-      const firstSplit = s.splits![0].paceSec;
-      const lastSplit = s.splits![s.splits!.length - 1].paceSec;
-      return ((lastSplit - firstSplit) / firstSplit) * 100;
-    });
-    avgFadePct = Number((drifts.reduce((a, b) => a + b, 0) / drifts.length).toFixed(1));
-  }
-  const hasCssTagged = activities.some(a => /css|umbral|5x400|4x600|fade/i.test(a.title) || /css|umbral|fade/i.test(a.notes || ''));
-  const check6M1Passed = hasCssTagged || longSwimsWithSplits.length >= 2;
-  const check6M2Passed = avgFadePct <= 5.0 && check6M1Passed;
-  const check6Status: ReadinessCheckItem['status'] = check6M2Passed ? 'passed' : avgFadePct <= 8.0 ? 'warning' : 'pending';
-  const check6Score = avgFadePct <= 5.0 ? 100 : avgFadePct <= 8.0 ? 70 : 40;
+  // Compare pacing between long open-water swims; this does not infer within-session fade.
+  const longOpenWaterPaces = activities
+    .filter(activity => activity.type === 'open_water' && activity.distance >= 4000 && activity.movingTime > 0)
+    .map(activity => activity.movingTime / activity.distance * 100);
+  const meanLongPace = longOpenWaterPaces.length > 0
+    ? longOpenWaterPaces.reduce((sum, pace) => sum + pace, 0) / longOpenWaterPaces.length
+    : 0;
+  const paceVariationPct = longOpenWaterPaces.length > 0 && meanLongPace > 0
+    ? Number((Math.sqrt(longOpenWaterPaces.reduce((sum, pace) => sum + (pace - meanLongPace) ** 2, 0) / longOpenWaterPaces.length) / meanLongPace * 100).toFixed(1))
+    : 0;
+  const check6M1Passed = longOpenWaterPaces.length >= 3;
+  const check6M2Passed = longOpenWaterPaces.length >= 5 && paceVariationPct <= 8;
+  const check6Status: ReadinessCheckItem['status'] = check6M2Passed ? 'passed' : check6M1Passed ? 'warning' : 'pending';
+  const check6Score = check6M1Passed ? Math.max(0, Math.min(100, Math.round(100 - paceVariationPct * 5))) : 0;
 
   const check6: ReadinessCheckItem = {
-    id: 'check-6-css-pacing-fade',
+    id: 'check-6-long-swim-pace-consistency',
     checkNumber: 6,
     category: 'pacing',
-    title: 'Check 6: Test de Ritmo CSS y Resistencia al Fade',
-    shortTitle: 'Ritmo & Fade',
-    description: 'Sostener ritmo crucero continuo (~2:00–2:15/100m) evitando caídas de eficiencia en fatiga acumulada.',
-    baseline: longSwimsWithSplits.length > 0
-      ? `Deriva observada en tiradas largas: +${avgFadePct}% entre primer y último km`
-      : 'Pendiente de registrar sesiones largas con datos de splits por km',
+    title: 'Consistencia de ritmo en tiradas largas',
+    shortTitle: 'Ritmo en fondos',
+    description: 'Compara el ritmo medio entre tiradas de aguas abiertas ≥4 km; no estima el fade dentro de cada sesión.',
+    baseline: check6M1Passed
+      ? `${longOpenWaterPaces.length} tiradas largas · variación entre ritmos: ${paceVariationPct}%`
+      : `${longOpenWaterPaces.length} de 3 tiradas largas necesarias`,
     milestones: [
-      { level: 'Hito 1 (Control de Ritmo)', label: 'Hito 1', target: 'Test de series largas o umbral (ej. 5x400m o 4x600m)', isCompleted: check6M1Passed },
-      { level: 'Hito 2 (Estabilidad)', label: 'Hito 2', target: 'Caída de ritmo (fade) controlada < 5% en fatiga', isCompleted: check6M2Passed },
+      { level: 'Hito 1', label: 'Hito 1', target: '3 tiradas ≥4 km con ritmo válido', isCompleted: check6M1Passed },
+      { level: 'Hito 2', label: 'Hito 2', target: '5 tiradas y variación ≤8%', isCompleted: check6M2Passed },
     ],
-    currentValue: avgFadePct,
-    targetValue: 5.0,
-    currentValueFormatted: `+${avgFadePct}% deriva`,
-    targetValueFormatted: '< 5% fade',
+    currentValue: paceVariationPct,
+    targetValue: 8,
+    currentValueFormatted: check6M1Passed ? `${paceVariationPct}% variación` : 'Datos insuficientes',
+    targetValueFormatted: '≤ 8% entre tiradas',
     unit: '%',
     status: check6Status,
     score: check6Score,
     weight: 10,
-    details: `Deriva media observada en fatiga: +${avgFadePct}%.`,
-    summary: check6M2Passed ? 'Excelente ritmo sostenido sin fade.' : 'Mantener pacing uniforme en la segunda mitad.',
+    details: check6M1Passed
+      ? `Variación calculada sobre ${longOpenWaterPaces.length} ritmos medios de tiradas ≥4 km.`
+      : 'El CSV no incluye splits por largos; hacen falta al menos 3 tiradas de aguas abiertas ≥4 km.',
+    summary: check6M2Passed ? 'Ritmos de fondo consistentes.' : check6M1Passed ? 'Suma más tiradas para consolidar la referencia.' : 'Aún no hay sesiones suficientes para medirlo.',
   };
 
   // 7. Check 7: Travesías de Competición (Simulacros Oficiales)
@@ -832,9 +873,111 @@ export function evaluateReadinessChecks(
     unit: 'eventos',
     status: check7Status,
     score: check7Score,
-    weight: 15,
+    weight: 12,
     details: `${compCount} travesías oficiales o eventos de larga distancia registrados.`,
     summary: check7M2Passed ? 'Experiencia competitiva previa consolidada.' : 'Programar 1-2 travesías oficiales antes de la carrera.',
+  };
+
+  const recentWorkWeeks = getRecentCompletedTrainingWeeks(referenceDate, 8);
+  const recentWorkWeekKeys = new Set(recentWorkWeeks.map(week => week.key));
+  const sessionCountsByWeek = new Map<string, number>();
+  activities.forEach(activity => {
+    const workWeek = getTrainingWorkWeek(activity.date);
+    if (!workWeek || !recentWorkWeekKeys.has(workWeek.key)) return;
+    sessionCountsByWeek.set(workWeek.key, (sessionCountsByWeek.get(workWeek.key) || 0) + 1);
+  });
+  const weeksWithThreeSessions = recentWorkWeeks.filter(week => (sessionCountsByWeek.get(week.key) || 0) >= 3).length;
+  const check8Status: ReadinessCheckItem['status'] = weeksWithThreeSessions >= 6 ? 'passed' : weeksWithThreeSessions >= 4 ? 'warning' : 'pending';
+  const check8Score = Math.round(weeksWithThreeSessions / 8 * 100);
+  const check8: ReadinessCheckItem = {
+    id: 'check-8-weekly-consistency',
+    checkNumber: 8,
+    category: 'volume',
+    title: 'Constancia semanal',
+    shortTitle: 'Constancia',
+    description: 'Semanas laborales completas con tres o más sesiones de natación.',
+    baseline: `${weeksWithThreeSessions} de ${recentWorkWeeks.length} semanas recientes con 3+ sesiones`,
+    milestones: [
+      { level: 'Hito 1', label: 'Hito 1', target: '4 de 8 semanas con 3+ sesiones', isCompleted: weeksWithThreeSessions >= 4 },
+      { level: 'Hito 2', label: 'Hito 2', target: '6 de 8 semanas con 3+ sesiones', isCompleted: weeksWithThreeSessions >= 6 },
+      { level: 'Hito 3', label: 'Hito 3', target: '8 de 8 semanas con 3+ sesiones', isCompleted: weeksWithThreeSessions >= 8 },
+    ],
+    currentValue: weeksWithThreeSessions,
+    targetValue: 6,
+    currentValueFormatted: `${weeksWithThreeSessions} / ${recentWorkWeeks.length} semanas`,
+    targetValueFormatted: '6 de 8 semanas',
+    unit: 'semanas',
+    status: check8Status,
+    score: check8Score,
+    weight: 8,
+    details: 'Una semana se cuenta de lunes a viernes; los entrenos del fin de semana no alteran esta métrica.',
+    summary: check8Status === 'passed' ? 'Buena regularidad de entrenamiento.' : 'Busca mantener tres sesiones por semana.',
+  };
+
+  const longOpenWaterSwims = activities.filter(activity => activity.type === 'open_water' && activity.distance >= 3000);
+  const continuousOpenWaterSwims = longOpenWaterSwims.filter(activity => {
+    const movingRatio = activity.movingRatio ?? (activity.elapsedTime > 0 ? activity.movingTime / activity.elapsedTime * 100 : 100);
+    return movingRatio >= 90;
+  }).length;
+  const openWaterContinuityPct = longOpenWaterSwims.length > 0
+    ? Math.round(continuousOpenWaterSwims / longOpenWaterSwims.length * 100)
+    : 0;
+  const check9Status: ReadinessCheckItem['status'] = longOpenWaterSwims.length >= 4 && openWaterContinuityPct >= 80
+    ? 'passed'
+    : longOpenWaterSwims.length >= 2 && openWaterContinuityPct >= 60 ? 'warning' : 'pending';
+  const check9: ReadinessCheckItem = {
+    id: 'check-9-open-water-continuity',
+    checkNumber: 9,
+    category: 'open_water',
+    title: 'Continuidad en aguas abiertas',
+    shortTitle: 'Continuidad OW',
+    description: 'Sesiones de aguas abiertas ≥3 km con al menos el 90% del tiempo en movimiento.',
+    baseline: `${continuousOpenWaterSwims} de ${longOpenWaterSwims.length} sesiones largas con ≥90% de continuidad`,
+    milestones: [
+      { level: 'Hito 1', label: 'Hito 1', target: '2 sesiones largas · continuidad ≥60%', isCompleted: longOpenWaterSwims.length >= 2 && openWaterContinuityPct >= 60 },
+      { level: 'Hito 2', label: 'Hito 2', target: '4 sesiones largas · continuidad ≥80%', isCompleted: longOpenWaterSwims.length >= 4 && openWaterContinuityPct >= 80 },
+    ],
+    currentValue: openWaterContinuityPct,
+    targetValue: 80,
+    currentValueFormatted: `${openWaterContinuityPct}% (${continuousOpenWaterSwims}/${longOpenWaterSwims.length})`,
+    targetValueFormatted: '≥80% continuas',
+    unit: '%',
+    status: check9Status,
+    score: longOpenWaterSwims.length >= 2 ? openWaterContinuityPct : 0,
+    weight: 6,
+    details: 'La continuidad se calcula con moving time / elapsed time; no depende del ritmo medio.',
+    summary: check9Status === 'passed' ? 'Buena continuidad en aguas abiertas.' : 'Practica mantener el nado continuo en fondos.',
+  };
+
+  const longSwimsLastEightWeeks = activities.filter(activity => {
+    const workWeek = getTrainingWorkWeek(activity.date);
+    return Boolean(workWeek && recentWorkWeekKeys.has(workWeek.key) && activity.distance >= 5000);
+  }).length;
+  const check10Status: ReadinessCheckItem['status'] = longSwimsLastEightWeeks >= 4
+    ? 'passed'
+    : longSwimsLastEightWeeks >= 2 ? 'warning' : 'pending';
+  const check10: ReadinessCheckItem = {
+    id: 'check-10-repeat-long-swims',
+    checkNumber: 10,
+    category: 'endurance',
+    title: 'Repetición de tiradas largas',
+    shortTitle: 'Fondos repetidos',
+    description: 'Nados de 5 km o más en las últimas ocho semanas laborales completas.',
+    baseline: `${longSwimsLastEightWeeks} tiradas ≥5 km en las últimas 8 semanas`,
+    milestones: [
+      { level: 'Hito 1', label: 'Hito 1', target: '2 tiradas ≥5 km', isCompleted: longSwimsLastEightWeeks >= 2 },
+      { level: 'Hito 2', label: 'Hito 2', target: '4 tiradas ≥5 km', isCompleted: longSwimsLastEightWeeks >= 4 },
+    ],
+    currentValue: longSwimsLastEightWeeks,
+    targetValue: 4,
+    currentValueFormatted: `${longSwimsLastEightWeeks} tiradas`,
+    targetValueFormatted: '4 tiradas',
+    unit: 'sesiones',
+    status: check10Status,
+    score: Math.min(100, Math.round(longSwimsLastEightWeeks / 4 * 100)),
+    weight: 5,
+    details: 'Cada sesión se cuenta una sola vez y solo si cae de lunes a viernes dentro de las ocho semanas completas.',
+    summary: check10Status === 'passed' ? 'Fondos largos repetidos recientemente.' : 'Añade más sesiones largas con recuperación suficiente.',
   };
 
   const checks: ReadinessCheckItem[] = [
@@ -845,6 +988,9 @@ export function evaluateReadinessChecks(
     check5,
     check6,
     check7,
+    check8,
+    check9,
+    check10,
   ];
 
   const totalWeight = checks.reduce((sum, c) => sum + c.weight, 0);
@@ -878,10 +1024,8 @@ export function calculateHistoricalReadiness(
     if (granularity === 'daily') {
       datesSet.add(act.date);
     } else if (granularity === 'weekly') {
-      const startOfYear = new Date(d.getFullYear(), 0, 1);
-      const pastDaysOfYear = (d.getTime() - startOfYear.getTime()) / 86400000;
-      const weekNum = Math.ceil((pastDaysOfYear + startOfYear.getDay() + 1) / 7);
-      datesSet.add(`${d.getFullYear()}-W${weekNum < 10 ? '0' : ''}${weekNum}`);
+      const workWeek = getTrainingWorkWeek(act.date);
+      if (workWeek) datesSet.add(workWeek.key);
     } else {
       datesSet.add(`${d.getFullYear()}-${d.getMonth() + 1 < 10 ? '0' : ''}${d.getMonth() + 1}`);
     }
@@ -898,11 +1042,8 @@ export function calculateHistoricalReadiness(
       if (granularity === 'daily') {
         return act.date <= timeKey;
       } else if (granularity === 'weekly') {
-        const startOfYear = new Date(d.getFullYear(), 0, 1);
-        const pastDays = (d.getTime() - startOfYear.getTime()) / 86400000;
-        const w = Math.ceil((pastDays + startOfYear.getDay() + 1) / 7);
-        const key = `${d.getFullYear()}-W${w < 10 ? '0' : ''}${w}`;
-        return key <= timeKey;
+        const workWeek = getTrainingWorkWeek(act.date);
+        return workWeek !== null && workWeek.key <= timeKey;
       } else {
         const key = `${d.getFullYear()}-${d.getMonth() + 1 < 10 ? '0' : ''}${d.getMonth() + 1}`;
         return key <= timeKey;
@@ -914,7 +1055,7 @@ export function calculateHistoricalReadiness(
     const latestAct = subActivities[subActivities.length - 1];
     const refDate = new Date(latestAct.date);
 
-    const { overallScore } = evaluateReadinessChecks(subActivities, refDate);
+    const { overallScore, checks } = evaluateReadinessChecks(subActivities, refDate);
     const vol30d = getVolumeInWindowDays(subActivities, 30, refDate);
     const vol14d = getVolumeInWindowDays(subActivities, 14, refDate);
     const longest = Math.max(...subActivities.map(a => a.distance));
@@ -940,7 +1081,7 @@ export function calculateHistoricalReadiness(
 
     let label = latestAct.date;
     if (granularity === 'weekly') {
-      label = `Sem ${timeKey.split('-W')[1]}`;
+      label = getTrainingWorkWeek(latestAct.date)?.label || timeKey;
     } else if (granularity === 'monthly') {
       const [year, month] = timeKey.split('-');
       const dateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1);
@@ -957,6 +1098,7 @@ export function calculateHistoricalReadiness(
       openWaterSessionsTotal: owCount,
       openWaterKmTotal: Number(owKm.toFixed(1)),
       avgPaceSec: Math.round(avgPace),
+      checkScores: Object.fromEntries(checks.map(check => [check.id, check.score])),
       milestoneUnlocked: milestone,
     });
   });
