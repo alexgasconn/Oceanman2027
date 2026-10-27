@@ -181,6 +181,26 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   }, [dataPoints]);
 
   const hoveredDataPoint = dataPoints.find(point => point.act.id === hoveredPoint?.id);
+  const findPointAtPointer = (svg: SVGSVGElement, clientX: number, clientY: number) => {
+    const screenMatrix = svg.getScreenCTM();
+    if (!screenMatrix) return null;
+
+    const pointer = svg.createSVGPoint();
+    pointer.x = clientX;
+    pointer.y = clientY;
+    const chartPointer = pointer.matrixTransform(screenMatrix.inverse());
+
+    let nearestPoint: typeof dataPoints[number] | null = null;
+    let nearestDistance = 18;
+    dataPoints.forEach(point => {
+      const distance = Math.hypot(point.x - chartPointer.x, point.y - chartPointer.y);
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestPoint = point;
+      }
+    });
+    return nearestPoint;
+  };
 
   return (
     <div className="space-y-8">
@@ -381,7 +401,19 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
         {/* SVG Telemetry Canvas */}
         <div className="relative w-full overflow-x-auto">
           <div className="min-w-[650px]">
-            <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-auto overflow-visible select-none">
+            <svg
+              viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+              className="w-full h-auto overflow-visible select-none cursor-crosshair"
+              onPointerMove={event => {
+                const point = findPointAtPointer(event.currentTarget, event.clientX, event.clientY);
+                setHoveredPoint(current => current?.id === point?.act.id ? current : point?.act || null);
+              }}
+              onPointerLeave={() => setHoveredPoint(null)}
+              onClick={event => {
+                const point = findPointAtPointer(event.currentTarget, event.clientX, event.clientY);
+                if (point) onSelectActivity(point.act);
+              }}
+            >
               <defs>
                 <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.3" />
@@ -424,7 +456,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                 const isHovered = hoveredPoint?.id === pt.act.id;
 
                 return (
-                  <g key={i} className="cursor-pointer" onClick={() => onSelectActivity(pt.act)}>
+                  <g key={i}>
                     <circle
                       cx={pt.x}
                       cy={pt.y}
@@ -432,9 +464,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                       fill={isOpen ? '#22d3ee' : '#3b82f6'}
                       stroke="#020617"
                       strokeWidth="2"
-                      onMouseEnter={() => setHoveredPoint(pt.act)}
-                      onMouseLeave={() => setHoveredPoint(null)}
-                      className="transition-transform hover:scale-125"
+                      pointerEvents="none"
                     />
                   </g>
                 );
@@ -449,6 +479,8 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                   </text>
                 );
               })}
+
+              <rect x="0" y="0" width={chartWidth} height={chartHeight} fill="transparent" pointerEvents="all" />
             </svg>
           </div>
         </div>
