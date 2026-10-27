@@ -28,9 +28,18 @@ interface RaceCalculatorViewProps {
   readiness: OceanmanReadiness;
 }
 
+const formatRaceClock = (secondsFromStart: number): string => {
+  const totalMinutes = (9 * 60 + 30 + Math.round(secondsFromStart / 60)) % (24 * 60);
+  const hour24 = Math.floor(totalMinutes / 60);
+  const hour12 = hour24 % 12 || 12;
+  const minute = totalMinutes % 60;
+  return `${hour12}:${minute < 10 ? '0' : ''}${minute} ${hour24 >= 12 ? 'PM' : 'AM'}`;
+};
+
 export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readiness }) => {
-  // Base pace in sec/100m (default from readiness)
-  const initialPace = readiness.estimatedPacePer100mSec || 100;
+  const hasPaceRecommendation = readiness.estimatedPacePer100mSec > 0;
+  const recommendedPace = Math.round(Math.min(180, Math.max(85, readiness.estimatedPacePer100mSec || 100)));
+  const initialPace = recommendedPace;
   const [targetPaceSec, setTargetPaceSec] = useState<number>(initialPace);
   const [wetsuit, setWetsuit] = useState<boolean>(true);
   const [sightingStrokes, setSightingStrokes] = useState<number>(6); // sight every 6 strokes
@@ -48,83 +57,90 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
     );
   }, [targetPaceSec, wetsuit, sightingStrokes, lakeCondition, fatigueStrategy]);
 
+  const recommendedStrategy = useMemo(() => calculateOrtaFeedPauses(
+    recommendedPace,
+    wetsuit,
+    sightingStrokes,
+    lakeCondition,
+    fatigueStrategy
+  ), [recommendedPace, wetsuit, sightingStrokes, lakeCondition, fatigueStrategy]);
+
   // Calories and energy estimation
   const totalHours = strategy.totalOfficialRaceSec / 3600;
   const availableFeedTimeSec = Math.max(0, strategy.officialCutoffSec - strategy.pureSwimMovingSec);
   const remainingCutoffSec = strategy.officialCutoffSec - strategy.totalOfficialRaceSec;
   const remainingCutoffLabel = `${remainingCutoffSec < 0 ? '-' : ''}${formatDuration(Math.abs(remainingCutoffSec))}`;
+  const formatFeedBudget = (seconds: number) => `${seconds < 0 ? '-' : ''}${formatDuration(Math.abs(seconds))}`;
   const totalCalories = Math.round(strategy.effectiveDistanceMeters * 0.28 + totalHours * 120);
   const totalCarbsGrams = Math.round(totalHours * 75);
   const totalHydrationMl = Math.round(totalHours * 650);
 
-  // Checkpoints for route summary
-  const checkpoints = [
+  const sectorRows = [
     {
       km: 0,
-      name: "Salida Oficial: Piazza de Omegna",
-      desc: "Extremo Norte del Lago d'Orta",
-      clockTime: "09:30 AM",
-      cutoffStr: "Salida",
-      splitTime: "00:00:00",
+      name: 'Salida · Omegna',
+      distanceKm: 0,
+      sectorTimeSec: 0,
+      elapsedSec: 0,
+      pauseSec: 0,
+      clockTime: formatRaceClock(0),
+      cutoffStr: 'Salida',
       marginMin: null,
       isCutoffSafe: true,
-      pauseNote: "Cámara de llamadas (09:15 AM)"
+      pauseNote: 'Inicio de carrera',
     },
     {
       km: 5.0,
       name: strategy.station1.name,
-      desc: "Primera plataforma flotante oficial de avituallamiento",
-      clockTime: strategy.station1.estimatedArrivalClock,
+      distanceKm: 5.0,
+      sectorTimeSec: strategy.station1.estimatedArrivalSec,
+      elapsedSec: strategy.station1.estimatedArrivalSec,
+      pauseSec: strategy.station1.recommendedPauseSec,
+      clockTime: formatRaceClock(strategy.station1.estimatedArrivalSec),
       cutoffStr: strategy.station1.officialCutOffClock,
-      splitTime: formatDuration(strategy.station1.estimatedArrivalSec),
       marginMin: strategy.station1.marginBeforeCutoffMin,
       isCutoffSafe: strategy.station1.isCutoffSafe,
-      pauseNote: `Pausa calculada: ${strategy.station1.recommendedPauseString}`
+      pauseNote: 'Feeding point #1',
     },
     {
       km: 8.5,
-      name: "Paso de Isola San Giulio & Pella",
-      desc: "Corazón espiritual del lago · Punto más profundo (-143m)",
-      clockTime: (() => {
-        const estSec = Math.round((8500 / 14000) * strategy.pureSwimMovingSec + strategy.station1PauseSec);
-        const mins = 9 * 60 + 30 + Math.round(estSec / 60);
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return `${h < 10 ? '0' : ''}${h}:${m < 10 ? '0' : ''}${m} ${h >= 12 ? 'PM' : 'AM'}`;
-      })(),
-      cutoffStr: "Paso libre",
-      splitTime: formatDuration(Math.round((8500 / 14000) * strategy.pureSwimMovingSec + strategy.station1PauseSec)),
+      name: 'Paso Isola San Giulio · Pella',
+      distanceKm: 3.5,
+      sectorTimeSec: Math.round(strategy.pureSwimMovingSec * 3.5 / 14),
+      elapsedSec: Math.round(strategy.pureSwimMovingSec * 8.5 / 14) + strategy.station1PauseSec,
+      pauseSec: 0,
+      clockTime: formatRaceClock(Math.round(strategy.pureSwimMovingSec * 8.5 / 14) + strategy.station1PauseSec),
+      cutoffStr: 'Paso libre',
       marginMin: null,
       isCutoffSafe: true,
-      pauseNote: "Autonomía de boya (sin estación fija)"
+      pauseNote: 'Sin estación fija',
     },
     {
       km: 10.0,
       name: strategy.station2.name,
-      desc: "Segunda y última plataforma flotante oficial de avituallamiento",
-      clockTime: strategy.station2.estimatedArrivalClock,
+      distanceKm: 1.5,
+      sectorTimeSec: Math.round(strategy.pureSwimMovingSec * 1.5 / 14),
+      elapsedSec: strategy.station2.estimatedArrivalSec,
+      pauseSec: strategy.station2.recommendedPauseSec,
+      clockTime: formatRaceClock(strategy.station2.estimatedArrivalSec),
       cutoffStr: strategy.station2.officialCutOffClock,
-      splitTime: formatDuration(strategy.station2.estimatedArrivalSec),
       marginMin: strategy.station2.marginBeforeCutoffMin,
       isCutoffSafe: strategy.station2.isCutoffSafe,
-      pauseNote: `Pausa calculada: ${strategy.station2.recommendedPauseString}`
+      pauseNote: 'Feeding point #2',
     },
     {
       km: 14.0,
-      name: "Meta Oficial: Playa Lido di Gozzano",
-      desc: "Cierre de Carrera (Extremo Sur)",
-      clockTime: (() => {
-        const mins = 9 * 60 + 30 + Math.round(strategy.totalOfficialRaceSec / 60);
-        const h = Math.floor(mins / 60);
-        const m = mins % 60;
-        return `${h < 10 ? '0' : ''}${h}:${m < 10 ? '0' : ''}${m} ${h >= 12 ? 'PM' : 'AM'}`;
-      })(),
-      cutoffStr: "03:30 PM (6h 00m)",
-      splitTime: strategy.totalOfficialRaceString,
+      name: 'Meta · Lido di Gozzano',
+      distanceKm: 4.0,
+      sectorTimeSec: Math.round(strategy.pureSwimMovingSec * 4 / 14),
+      elapsedSec: strategy.totalOfficialRaceSec,
+      pauseSec: 0,
+      clockTime: formatRaceClock(strategy.totalOfficialRaceSec),
+      cutoffStr: '3:30 PM (6h 00m)',
       marginMin: strategy.finishMarginMin,
       isCutoffSafe: strategy.isWithinOfficialCutoff,
-      pauseNote: "Campana de Finisher"
-    }
+      pauseNote: 'Tiempo final con ambas paradas incluidas',
+    },
   ];
 
   return (
@@ -189,6 +205,26 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                 <span>1:25</span>
                 <span>2:10</span>
                 <span>3:00 /100m</span>
+              </div>
+              <div className="mt-3 flex flex-col gap-3 rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <span className="block text-[10px] font-semibold uppercase text-cyan-300">Recomendación desde tus datos</span>
+                  <span className="font-mono text-lg font-bold text-white">{hasPaceRecommendation ? formatPace(recommendedPace) : 'Sin datos suficientes'}</span>
+                  <p className="text-[10px] text-slate-400">
+                    {hasPaceRecommendation
+                      ? `Predicción total a este ritmo y con estas condiciones: ${recommendedStrategy.totalOfficialRaceString}`
+                      : 'El ritmo inicial es provisional hasta registrar una tirada válida.'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setTargetPaceSec(recommendedPace)}
+                  disabled={!hasPaceRecommendation}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-500/30 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <TrendingUp className="h-3.5 w-3.5" />
+                  Aplicar recomendación
+                </button>
               </div>
             </div>
 
@@ -345,13 +381,13 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
                 <span className="text-slate-400 block text-[10px] flex items-center gap-1">
                   <Clock className="w-3 h-3 text-amber-400" />
-                  <span>Tiempo disponible para avituallar</span>
+                  <span>Presupuesto de paradas para el corte de 6h</span>
                 </span>
                 <span className="font-mono font-bold text-amber-400 text-base tabular-nums">
                   {formatDuration(availableFeedTimeSec)}
                 </span>
                 <span className="block mt-1 text-[10px] text-slate-500">
-                  Pausas previstas: {formatDuration(strategy.totalRestPauseSec)}
+                  Pausas previstas: {formatDuration(strategy.totalRestPauseSec)} · restante: {remainingCutoffLabel}
                 </span>
               </div>
 
@@ -371,7 +407,7 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
               <Droplet className="w-4 h-4 text-cyan-400" />
-              <span>Análisis de las 2 Estaciones Flotantes Oficiales</span>
+              <span>Avituallamientos y margen de corte</span>
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -381,8 +417,8 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
                     Estación Flotante #1 · Km 5.0
                   </span>
-                  <span className="text-xs font-mono font-bold text-emerald-400">
-                    +{strategy.station1.marginBeforeCutoffMin} min colchón
+                  <span className={`text-xs font-mono font-bold ${strategy.station1.isCutoffSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {strategy.station1.marginBeforeCutoffMin >= 0 ? '+' : ''}{strategy.station1.marginBeforeCutoffMin} min al corte
                   </span>
                 </div>
                 <div>
@@ -391,8 +427,12 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                 </div>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between text-slate-300">
-                    <span>Pausa calculada:</span>
+                    <span>Tiempo de parada recomendado:</span>
                     <strong className="text-cyan-400 font-mono">{strategy.station1.recommendedPauseString}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Presupuesto libre de paradas tras este punto:</span>
+                    <strong className="text-amber-300 font-mono">{formatFeedBudget(availableFeedTimeSec - strategy.station1PauseSec)}</strong>
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>Índice de fatiga:</span>
@@ -415,8 +455,8 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                   <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
                     Estación Flotante #2 · Km 10.0
                   </span>
-                  <span className="text-xs font-mono font-bold text-emerald-400">
-                    +{strategy.station2.marginBeforeCutoffMin} min colchón
+                  <span className={`text-xs font-mono font-bold ${strategy.station2.isCutoffSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {strategy.station2.marginBeforeCutoffMin >= 0 ? '+' : ''}{strategy.station2.marginBeforeCutoffMin} min al corte
                   </span>
                 </div>
                 <div>
@@ -425,8 +465,12 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
                 </div>
                 <div className="space-y-1 text-xs">
                   <div className="flex justify-between text-slate-300">
-                    <span>Pausa calculada:</span>
+                    <span>Tiempo de parada recomendado:</span>
                     <strong className="text-cyan-400 font-mono">{strategy.station2.recommendedPauseString}</strong>
+                  </div>
+                  <div className="flex justify-between text-slate-300">
+                    <span>Presupuesto libre de paradas tras este punto:</span>
+                    <strong className="text-amber-300 font-mono">{formatFeedBudget(availableFeedTimeSec - strategy.totalRestPauseSec)}</strong>
                   </div>
                   <div className="flex justify-between text-slate-300">
                     <span>Índice de fatiga:</span>
@@ -445,51 +489,50 @@ export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readines
             </div>
           </div>
 
-          {/* Course Splits Table */}
+          {/* Sector-by-sector race projection */}
           <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
             <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
               <MapPin className="w-4 h-4 text-rose-400" />
-              <span>Cronograma Oficial y Tiempos de Corte (Salida 09:30 AM · Omegna → Lido di Gozzano)</span>
+              <span>Sectores, ritmos y paso por puntos oficiales</span>
             </h3>
 
-            <div className="border border-slate-800 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-xs">
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full min-w-[980px] text-left text-xs">
                 <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
                   <tr>
-                    <th className="py-2.5 px-3 font-semibold">Km</th>
-                    <th className="py-2.5 px-3 font-semibold">Punto Oficial</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Tiempo Carrera</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Hora Paso</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Límite Oficial</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Margen</th>
+                    <th className="py-2.5 px-3 font-semibold">Sector / llegada</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Distancia</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Ritmo</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Nado sector</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Pausa feeding</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Acumulado</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Hora paso</th>
+                    <th className="py-2.5 px-3 text-right font-semibold">Corte / margen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums text-slate-300">
-                  {checkpoints.map((cp, i) => (
-                    <tr key={i} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-2.5 px-3 font-bold text-cyan-400">{cp.km.toFixed(1)}k</td>
+                  {sectorRows.map((row) => (
+                    <tr key={row.km} className="hover:bg-slate-800/30 transition-colors">
                       <td className="py-2.5 px-3 font-sans font-medium text-white">
-                        <div>{cp.name}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{cp.pauseNote}</div>
+                        <div>{row.km === 0 ? 'Salida' : `${(row.km - row.distanceKm).toFixed(1)}–${row.km.toFixed(1)} km · ${row.name}`}</div>
+                        <div className="text-[10px] text-slate-400 font-normal">{row.pauseNote}</div>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-semibold text-slate-200">
-                        {cp.splitTime}
+                      <td className="py-2.5 px-3 text-right">{row.distanceKm > 0 ? `${row.distanceKm.toFixed(1)} km` : '—'}</td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-cyan-300">
+                        {row.distanceKm > 0 ? formatPace(strategy.effectivePaceSec) : '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-bold text-amber-400">
-                        {cp.clockTime}
+                      <td className="py-2.5 px-3 text-right">{row.distanceKm > 0 ? formatDuration(row.sectorTimeSec) : '—'}</td>
+                      <td className="py-2.5 px-3 text-right text-amber-300">
+                        {row.pauseSec > 0 ? formatDuration(row.pauseSec) : '—'}
                       </td>
-                      <td className="py-2.5 px-3 text-right text-slate-400 font-sans text-[11px]">
-                        {cp.cutoffStr}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">
-                        {cp.marginMin !== null ? (
-                          cp.isCutoffSafe ? (
-                            <span className="text-emerald-400 font-bold">+{cp.marginMin}m</span>
-                          ) : (
-                            <span className="text-rose-400 font-bold">{cp.marginMin}m</span>
-                          )
-                        ) : (
-                          <span className="text-slate-600">—</span>
+                      <td className="py-2.5 px-3 text-right font-semibold">{formatDuration(row.elapsedSec)}</td>
+                      <td className="py-2.5 px-3 text-right font-bold text-amber-400">{row.clockTime}</td>
+                      <td className="py-2.5 px-3 text-right text-[11px]">
+                        {row.cutoffStr}
+                        {row.marginMin !== null && (
+                          <span className={`ml-1 ${row.isCutoffSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            ({row.marginMin >= 0 ? '+' : ''}{row.marginMin}m)
+                          </span>
                         )}
                       </td>
                     </tr>

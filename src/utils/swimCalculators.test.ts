@@ -8,6 +8,7 @@ import {
   calculateDPS,
   calculateStrokeIndex,
   calculateSWOLF,
+  calculateOrtaFeedPauses,
   parseStravaCsv,
   recalculateSwimMetrics,
   getCalendarWeeklyMileage,
@@ -72,6 +73,14 @@ test('calculateStrokeIndex computes speed * DPS', () => {
 test('calculateSWOLF calculates reasonable score', () => {
   const swolf = calculateSWOLF(100, 1.8, 50); // 1:40/100m in 50m pool = 50s + 56 strokes ≈ 106
   assert.ok(swolf >= 95 && swolf <= 115);
+});
+
+test('calculateOrtaFeedPauses formats station arrivals in 12-hour clock time', () => {
+  const strategy = calculateOrtaFeedPauses(100, true, 6, 'calm', 'medium');
+
+  assert.equal(strategy.station1.estimatedArrivalClock, '10:56 AM');
+  assert.equal(strategy.station2.estimatedArrivalClock, '12:23 PM');
+  assert.equal(strategy.totalOfficialRaceSec, strategy.pureSwimMovingSec + strategy.totalRestPauseSec);
 });
 
 test('recalculateSwimMetrics uses a 20m pool before 2025-03-25 only', () => {

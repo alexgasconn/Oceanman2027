@@ -1385,10 +1385,11 @@ export function calculateOrtaFeedPauses(
   const finishMarginMin = Math.round((cutoffFinishSec - totalOfficialRaceSec) / 60);
 
   const formatClock = (secondsFromStart: number) => {
-    const totalMinutes = 9 * 60 + 30 + Math.round(secondsFromStart / 60);
-    const h = Math.floor(totalMinutes / 60);
-    const m = totalMinutes % 60;
-    return `${h < 10 ? '0' : ''}${h}:${m < 10 ? '0' : ''}${m} ${h >= 12 ? 'PM' : 'AM'}`;
+    const totalMinutes = (9 * 60 + 30 + Math.round(secondsFromStart / 60)) % (24 * 60);
+    const hour24 = Math.floor(totalMinutes / 60);
+    const hour12 = hour24 % 12 || 12;
+    const minute = totalMinutes % 60;
+    return `${hour12}:${minute < 10 ? '0' : ''}${minute} ${hour24 >= 12 ? 'PM' : 'AM'}`;
   };
 
   const station1: OrtaFeedStationAnalysis = {
