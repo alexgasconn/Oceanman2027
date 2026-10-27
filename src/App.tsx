@@ -90,22 +90,42 @@ export default function App() {
           const migrated = current.map(activity => {
             const source = sourceActivities.get(activity.id);
             if (!source || (
+              activity.date === source.date &&
+              activity.type === source.type &&
+              activity.distance === source.distance &&
+              activity.movingTime === source.movingTime &&
+              activity.elapsedTime === source.elapsedTime &&
+              activity.poolLength === source.poolLength &&
               activity.hasPoolLength === source.hasPoolLength &&
               activity.elevationHigh === source.elevationHigh &&
               activity.elevationLow === source.elevationLow &&
               activity.startedAt === source.startedAt &&
+              activity.hasRecordedMovingTime === source.hasRecordedMovingTime &&
+              activity.hasRecordedElapsedTime === source.hasRecordedElapsedTime &&
               activity.hasRecordedCadence === source.hasRecordedCadence &&
-              activity.averageCadence === source.averageCadence
+              activity.averageCadence === source.averageCadence &&
+              activity.hasRecordedSwolf === source.hasRecordedSwolf &&
+              activity.swolf === source.swolf &&
+              activity.hasRecordedSpl === source.hasRecordedSpl &&
+              activity.strokesPerLength === source.strokesPerLength &&
+              activity.totalCycles === source.totalCycles &&
+              activity.totalStrokes === source.totalStrokes &&
+              activity.hasRecordedTotalStrokes === source.hasRecordedTotalStrokes &&
+              activity.hasRecordedCalories === source.hasRecordedCalories &&
+              activity.calories === source.calories &&
+              activity.waterTemp === source.waterTemp &&
+              activity.hasRecordedWaterTemp === source.hasRecordedWaterTemp &&
+              activity.hasWetsuit === undefined &&
+              activity.dps === undefined &&
+              activity.strokeIndex === undefined &&
+              activity.poolDistanceCorrection === undefined
             )) return activity;
             changed = true;
             return recalculateSwimMetrics({
               ...activity,
-              elevationHigh: source.elevationHigh,
-              elevationLow: source.elevationLow,
-              hasPoolLength: source.hasPoolLength,
-              startedAt: source.startedAt,
-              averageCadence: source.hasRecordedCadence ? source.averageCadence : activity.averageCadence,
-              hasRecordedCadence: source.hasRecordedCadence || activity.hasRecordedCadence,
+              ...source,
+              notes: activity.notes,
+              hasWetsuit: undefined,
             });
           });
           return changed ? migrated : current;

@@ -13,21 +13,6 @@ export interface WeeklyVolumePoint {
   rollingMeanKm: number;
 }
 
-export interface PoolSwolfSummary {
-  poolLength: number;
-  count: number;
-  averageSwolf: number;
-}
-
-export interface SwolfEfficiencyStats {
-  poolSummaries: PoolSwolfSummary[];
-  measuredSessions: number;
-  average25mEquivalent: number | null;
-  longSwimDriftPct: number | null;
-  shortSwimCount: number;
-  longSwimCount: number;
-}
-
 export function createHistogram(values: number[], binCount = 8): HistogramBin[] {
   if (values.length === 0) return [];
 
@@ -52,58 +37,6 @@ export function createHistogram(values: number[], binCount = 8): HistogramBin[] 
   });
 
   return bins;
-}
-
-export function getSwolfEfficiencyStats(activities: SwimActivity[]): SwolfEfficiencyStats {
-  const measuredPoolSwims = activities.filter(activity =>
-    activity.type === 'pool' &&
-    activity.hasRecordedCadence === true &&
-    Number.isFinite(activity.swolf) && (activity.swolf ?? 0) > 0 &&
-    Number.isFinite(activity.poolLength) && (activity.poolLength ?? 0) > 0
-  );
-  const byLength = new Map<number, SwimActivity[]>();
-  measuredPoolSwims.forEach(activity => {
-    const length = activity.poolLength!;
-    const sessions = byLength.get(length) || [];
-    sessions.push(activity);
-    byLength.set(length, sessions);
-  });
-
-  const poolSummaries = [...byLength.entries()]
-    .map(([poolLength, sessions]) => ({
-      poolLength,
-      count: sessions.length,
-      averageSwolf: sessions.reduce((sum, session) => sum + session.swolf!, 0) / sessions.length,
-    }))
-    .sort((a, b) => a.poolLength - b.poolLength);
-
-  const normalizedScores = measuredPoolSwims.map(activity => activity.swolf! * 25 / activity.poolLength!);
-  const average25mEquivalent = normalizedScores.length > 0
-    ? normalizedScores.reduce((sum, score) => sum + score, 0) / normalizedScores.length
-    : null;
-
-  const comparableLength = [...byLength.entries()]
-    .sort((a, b) => b[1].length - a[1].length)
-    .find(([, sessions]) =>
-      sessions.filter(session => session.distance < 2000).length >= 2 &&
-      sessions.filter(session => session.distance >= 2000).length >= 2
-    );
-  const shortSwims = comparableLength?.[1].filter(session => session.distance < 2000) || [];
-  const longSwims = comparableLength?.[1].filter(session => session.distance >= 2000) || [];
-  const averageSwolf = (sessions: SwimActivity[]) =>
-    sessions.reduce((sum, session) => sum + session.swolf!, 0) / sessions.length;
-  const longSwimDriftPct = shortSwims.length > 0 && longSwims.length > 0
-    ? (averageSwolf(longSwims) / averageSwolf(shortSwims) - 1) * 100
-    : null;
-
-  return {
-    poolSummaries,
-    measuredSessions: measuredPoolSwims.length,
-    average25mEquivalent,
-    longSwimDriftPct,
-    shortSwimCount: shortSwims.length,
-    longSwimCount: longSwims.length,
-  };
 }
 
 export function getWeekdayHourKilometers(activities: SwimActivity[]): number[][] {

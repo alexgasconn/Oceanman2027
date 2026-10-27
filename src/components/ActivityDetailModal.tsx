@@ -16,7 +16,7 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
-      <div 
+      <div
         className="relative w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
         role="dialog"
         aria-modal="true"
@@ -26,8 +26,8 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
         <div className="p-6 border-b border-slate-800 flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-cyan-400 mb-1">
-              <span className={`w-2 h-2 rounded-full ${activity.type === 'open_water' ? 'bg-cyan-400' : 'bg-blue-400'}`} />
-              <span>{activity.type === 'open_water' ? 'Aguas Abiertas (Mar / Lago)' : 'Sesión Piscina'}</span>
+              <span className={`w-2 h-2 rounded-full ${activity.type === 'open_water' ? 'bg-cyan-400' : activity.type === 'pool' ? 'bg-blue-400' : 'bg-slate-400'}`} />
+              <span>{activity.type === 'open_water' ? 'Aguas Abiertas' : activity.type === 'pool' ? 'Sesión Piscina' : 'Tipo sin clasificar'}</span>
               <span aria-hidden="true" className="text-slate-600">·</span>
               <span className="text-slate-400 font-mono">{activity.date}</span>
             </div>
@@ -59,7 +59,7 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
             <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
               <span className="text-[11px] text-slate-400 block">Tiempo en Movimiento</span>
               <span className="text-xl font-bold font-mono text-cyan-400 tabular-nums">
-                {formatDuration(activity.movingTime)}
+                {activity.movingTime > 0 ? formatDuration(activity.movingTime) : 'N/D'}
               </span>
             </div>
 
@@ -74,9 +74,8 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
               <span className="text-[11px] text-slate-400 block">Cadencia Media</span>
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-bold font-mono text-amber-400 tabular-nums">
-                  {activity.averageCadence || '--'}
+                  {activity.hasRecordedCadence && activity.averageCadence !== undefined ? activity.averageCadence : 'N/D'}
                 </span>
-                <span className="text-xs text-slate-400">SPM</span>
               </div>
             </div>
           </div>
@@ -85,31 +84,38 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
               <span className="text-slate-400 block text-[10px]">Moving Ratio</span>
-              <span className={`font-mono font-bold text-sm tabular-nums ${
-                (activity.movingRatio || 100) >= 90 ? 'text-emerald-400' : 'text-amber-400'
-              }`}>
-                {activity.movingRatio ? `${activity.movingRatio}%` : '100%'}
+              <span className={`font-mono font-bold text-sm tabular-nums ${(activity.movingRatio ?? 0) >= 90 ? 'text-emerald-400' : 'text-amber-400'
+                }`}>
+                {activity.movingRatio !== undefined ? `${activity.movingRatio}%` : 'N/D'}
               </span>
             </div>
 
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
               <span className="text-slate-400 block text-[10px]">Elevación GPS (Máx/Mín)</span>
               <span className="font-mono font-bold text-cyan-300 text-sm tabular-nums">
-                {activity.elevationHigh !== undefined ? `${activity.elevationHigh}m / ${activity.elevationLow || 0}m` : (activity.type === 'open_water' ? '>0m' : '0m')}
+                {activity.elevationHigh !== undefined || activity.elevationLow !== undefined
+                  ? `${activity.elevationHigh ?? 'N/D'}m / ${activity.elevationLow ?? 'N/D'}m`
+                  : 'N/D'}
               </span>
             </div>
 
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
               <span className="text-slate-400 block text-[10px]">DPS (m / ciclo)</span>
               <span className="font-mono font-bold text-blue-300 text-sm tabular-nums">
-                {activity.dps ? `${activity.dps} m` : '--'}
+                {activity.hasRecordedDps && activity.dps !== undefined ? `${activity.dps} m` : 'N/D'}
               </span>
             </div>
 
             <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
               <span className="text-slate-400 block text-[10px]">Puntuación SWOLF</span>
               <span className="font-mono font-bold text-violet-300 text-sm tabular-nums">
-                {activity.swolf || '--'}
+                {activity.hasRecordedSwolf && activity.swolf !== undefined ? activity.swolf : 'N/D'}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-950/60 border border-slate-800/80">
+              <span className="text-slate-400 block text-[10px]">SPL (brazadas/largo)</span>
+              <span className="font-mono font-bold text-violet-300 text-sm tabular-nums">
+                {activity.hasRecordedSpl && activity.strokesPerLength !== undefined ? activity.strokesPerLength : 'N/D'}
               </span>
             </div>
           </div>
@@ -137,6 +143,7 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                       <th className="py-2.5 px-3 font-semibold">Cadencia</th>
                       <th className="py-2.5 px-3 font-semibold">Frecuencia Cardíaca</th>
                       <th className="py-2.5 px-3 font-semibold">SWOLF</th>
+                      <th className="py-2.5 px-3 font-semibold">SPL</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums text-slate-300">
@@ -144,9 +151,10 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                       <tr key={s.km} className="hover:bg-slate-800/30 transition-colors">
                         <td className="py-2 px-3 font-bold text-white">Km {s.km}</td>
                         <td className="py-2 px-3 text-cyan-400 font-semibold">{formatPace(s.paceSec)}</td>
-                        <td className="py-2 px-3">{s.cadenceSpm || '--'} SPM</td>
-                        <td className="py-2 px-3">{s.heartRate ? `${s.heartRate} bpm` : '--'}</td>
-                        <td className="py-2 px-3">{s.swolf || '--'}</td>
+                        <td className="py-2 px-3">{s.cadenceSpm ?? 'N/D'}</td>
+                        <td className="py-2 px-3">{s.heartRate !== undefined ? `${s.heartRate} bpm` : 'N/D'}</td>
+                        <td className="py-2 px-3">{s.swolf ?? 'N/D'}</td>
+                        <td className="py-2 px-3">{s.strokesPerLength ?? 'N/D'}</td>
                       </tr>
                     ))}
                   </tbody>

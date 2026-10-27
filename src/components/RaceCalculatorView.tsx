@@ -1,545 +1,378 @@
-import React, { useState, useMemo } from 'react';
-import {
-  Compass,
-  Clock,
-  Flame,
-  Droplet,
-  Zap,
-  MapPin,
-  Sliders,
-  ShieldCheck,
-  ArrowRight,
-  TrendingUp,
-  BatteryCharging,
-  AlertTriangle,
-  Heart,
-  Timer
-} from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Compass, Sliders, ShieldCheck, AlertTriangle, TrendingUp, Clock, MapPin } from 'lucide-react';
 import { OceanmanReadiness } from '../types/swim.ts';
+import { formatDuration, formatPace } from '../utils/swimCalculators.ts';
 import {
-  formatDuration,
-  formatPace,
-  OCEANMAN_DISTANCE_METERS,
-  calculateOrtaFeedPauses
-} from '../utils/swimCalculators.ts';
+  buildRacePlan,
+  CALM_CONDITIONS,
+  RACE_CUTOFF_SEC,
+  RaceConditions,
+  suggestStopPlan,
+} from '../utils/raceModel.ts';
 import { OceanmanCourseD3Chart } from './OceanmanCourseD3Chart.tsx';
 
 interface RaceCalculatorViewProps {
   readiness: OceanmanReadiness;
 }
 
-const formatRaceClock = (secondsFromStart: number): string => {
-  const totalMinutes = (9 * 60 + 30 + Math.round(secondsFromStart / 60)) % (24 * 60);
-  const hour24 = Math.floor(totalMinutes / 60);
-  const hour12 = hour24 % 12 || 12;
-  const minute = totalMinutes % 60;
-  return `${hour12}:${minute < 10 ? '0' : ''}${minute} ${hour24 >= 12 ? 'PM' : 'AM'}`;
-};
+type SurfaceState = 'calm' | 'light_chop' | 'headwind';
+type SightingState = 'tight' | 'normal' | 'wide';
+
+const SURFACE_PENALTY: Record<SurfaceState, number> = { calm: 0, light_chop: 2, headwind: 4.5 };
+const NAVIGATION_PENALTY: Record<SightingState, number> = { tight: 2, normal: 3.5, wide: 5 };
+
+const signed = (seconds: number) => `${seconds < 0 ? '-' : '+'}${formatDuration(Math.abs(seconds))}`;
 
 export const RaceCalculatorView: React.FC<RaceCalculatorViewProps> = ({ readiness }) => {
-  const hasPaceRecommendation = readiness.estimatedPacePer100mSec > 0;
-  const recommendedPace = Math.round(Math.min(180, Math.max(85, readiness.estimatedPacePer100mSec || 100)));
-  const initialPace = recommendedPace;
-  const [targetPaceSec, setTargetPaceSec] = useState<number>(initialPace);
-  const [wetsuit, setWetsuit] = useState<boolean>(true);
-  const [sightingStrokes, setSightingStrokes] = useState<number>(6); // sight every 6 strokes
-  const [fatigueStrategy, setFatigueStrategy] = useState<'high' | 'medium' | 'conservative'>('medium');
-  const [lakeCondition, setLakeCondition] = useState<'calm' | 'light_chop' | 'headwind'>('calm');
+  const projectedPace = readiness.estimatedPacePer100mSec;
+  const hasProjection = projectedPace > 0;
+  const recommendedPace = hasProjection ? Math.round(Math.min(220, Math.max(70, projectedPace))) : 130;
 
-  // Exact 2-station official model from regulations
-  const strategy = useMemo(() => {
-    return calculateOrtaFeedPauses(
-      targetPaceSec,
-      wetsuit,
-      sightingStrokes,
-      lakeCondition,
-      fatigueStrategy
-    );
-  }, [targetPaceSec, wetsuit, sightingStrokes, lakeCondition, fatigueStrategy]);
+  const [targetPaceSec, setTargetPaceSec] = useState<number>(recommendedPace);
+  const [surface, setSurface] = useState<SurfaceState>('calm');
+  const [sighting, setSighting] = useState<SightingState>('normal');
+  const [wetsuit, setWetsuit] = useState(true);
+  const [autoStops, setAutoStops] = useState(true);
+  const [manualStopSec, setManualStopSec] = useState(90);
 
-  const recommendedStrategy = useMemo(() => calculateOrtaFeedPauses(
-    recommendedPace,
-    wetsuit,
-    sightingStrokes,
-    lakeCondition,
-    fatigueStrategy
-  ), [recommendedPace, wetsuit, sightingStrokes, lakeCondition, fatigueStrategy]);
+  const conditions: RaceConditions = useMemo(() => ({
+    ...CALM_CONDITIONS,
+    surfacePenaltySec: SURFACE_PENALTY[surface],
+    navigationPenaltyPct: NAVIGATION_PENALTY[sighting],
+    wetsuitGainSec: wetsuit ? 4.5 : 0,
+  }), [surface, sighting, wetsuit]);
 
-  // Calories and energy estimation
-  const totalHours = strategy.totalOfficialRaceSec / 3600;
-  const availableFeedTimeSec = Math.max(0, strategy.officialCutoffSec - strategy.pureSwimMovingSec);
-  const remainingCutoffSec = strategy.officialCutoffSec - strategy.totalOfficialRaceSec;
-  const remainingCutoffLabel = `${remainingCutoffSec < 0 ? '-' : ''}${formatDuration(Math.abs(remainingCutoffSec))}`;
-  const formatFeedBudget = (seconds: number) => `${seconds < 0 ? '-' : ''}${formatDuration(Math.abs(seconds))}`;
-  const totalCalories = Math.round(strategy.effectiveDistanceMeters * 0.28 + totalHours * 120);
-  const totalCarbsGrams = Math.round(totalHours * 75);
-  const totalHydrationMl = Math.round(totalHours * 650);
+  const stopSecByKm = useMemo(() => (
+    autoStops
+      ? suggestStopPlan(targetPaceSec, conditions)
+      : { 5: manualStopSec, 10: manualStopSec }
+  ), [autoStops, manualStopSec, targetPaceSec, conditions]);
 
-  const sectorRows = [
-    {
-      km: 0,
-      name: 'Salida · Omegna',
-      distanceKm: 0,
-      sectorTimeSec: 0,
-      elapsedSec: 0,
-      pauseSec: 0,
-      clockTime: formatRaceClock(0),
-      cutoffStr: 'Salida',
-      marginMin: null,
-      isCutoffSafe: true,
-      pauseNote: 'Inicio de carrera',
-    },
-    {
-      km: 5.0,
-      name: strategy.station1.name,
-      distanceKm: 5.0,
-      sectorTimeSec: strategy.station1.estimatedArrivalSec,
-      elapsedSec: strategy.station1.estimatedArrivalSec,
-      pauseSec: strategy.station1.recommendedPauseSec,
-      clockTime: formatRaceClock(strategy.station1.estimatedArrivalSec),
-      cutoffStr: strategy.station1.officialCutOffClock,
-      marginMin: strategy.station1.marginBeforeCutoffMin,
-      isCutoffSafe: strategy.station1.isCutoffSafe,
-      pauseNote: 'Feeding point #1',
-    },
-    {
-      km: 8.5,
-      name: 'Paso Isola San Giulio · Pella',
-      distanceKm: 3.5,
-      sectorTimeSec: Math.round(strategy.pureSwimMovingSec * 3.5 / 14),
-      elapsedSec: Math.round(strategy.pureSwimMovingSec * 8.5 / 14) + strategy.station1PauseSec,
-      pauseSec: 0,
-      clockTime: formatRaceClock(Math.round(strategy.pureSwimMovingSec * 8.5 / 14) + strategy.station1PauseSec),
-      cutoffStr: 'Paso libre',
-      marginMin: null,
-      isCutoffSafe: true,
-      pauseNote: 'Sin estación fija',
-    },
-    {
-      km: 10.0,
-      name: strategy.station2.name,
-      distanceKm: 1.5,
-      sectorTimeSec: Math.round(strategy.pureSwimMovingSec * 1.5 / 14),
-      elapsedSec: strategy.station2.estimatedArrivalSec,
-      pauseSec: strategy.station2.recommendedPauseSec,
-      clockTime: formatRaceClock(strategy.station2.estimatedArrivalSec),
-      cutoffStr: strategy.station2.officialCutOffClock,
-      marginMin: strategy.station2.marginBeforeCutoffMin,
-      isCutoffSafe: strategy.station2.isCutoffSafe,
-      pauseNote: 'Feeding point #2',
-    },
-    {
-      km: 14.0,
-      name: 'Meta · Lido di Gozzano',
-      distanceKm: 4.0,
-      sectorTimeSec: Math.round(strategy.pureSwimMovingSec * 4 / 14),
-      elapsedSec: strategy.totalOfficialRaceSec,
-      pauseSec: 0,
-      clockTime: formatRaceClock(strategy.totalOfficialRaceSec),
-      cutoffStr: '3:30 PM (6h 00m)',
-      marginMin: strategy.finishMarginMin,
-      isCutoffSafe: strategy.isWithinOfficialCutoff,
-      pauseNote: 'Tiempo final con ambas paradas incluidas',
-    },
-  ];
+  const plan = useMemo(
+    () => buildRacePlan({ basePacePer100mSec: targetPaceSec, conditions, stopSecByKm }),
+    [targetPaceSec, conditions, stopSecByKm],
+  );
+
+  const recommendedPlan = useMemo(
+    () => buildRacePlan({
+      basePacePer100mSec: recommendedPace,
+      conditions,
+      stopSecByKm: suggestStopPlan(recommendedPace, conditions),
+    }),
+    [recommendedPace, conditions],
+  );
 
   return (
     <div className="space-y-8">
-      {/* Introduction Card */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Compass className="w-5 h-5 text-cyan-400" />
-              <span>Estrategia Oficial Lago d'Orta 14K · Modelo de 2 Estaciones Flotantes</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-1 max-w-3xl">
-              Simulación de ritmo, oleaje térmico y modelo dinámico de fatiga para las 2 únicas plataformas flotantes oficiales de la travesía (Km 5.0 y Km 10.0).
-            </p>
-          </div>
-          <div className="flex items-center gap-2 bg-slate-950 px-3.5 py-1.5 rounded-xl border border-slate-800 text-xs text-slate-300 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span>2 Estaciones Flotantes Oficiales</span>
-          </div>
-        </div>
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
+        <h2 className="flex items-center gap-2 text-xl font-bold text-white">
+          <Compass className="h-5 w-5 text-cyan-400" />
+          <span>Plan de carrera · Lago d'Orta 14 km</span>
+        </h2>
+        <p className="mt-1 max-w-3xl text-xs text-slate-400">
+          Ritmo, tiempos acumulados y margen contra los cortes oficiales. El tiempo de parada disponible se recalcula
+          con cada cambio de ritmo o de condiciones.
+        </p>
       </div>
 
-      {/* Interactive D3 Bathymetric Elevation Profile & Lake Map */}
       <OceanmanCourseD3Chart
         targetPaceSec={targetPaceSec}
-        effectivePaceSec={strategy.effectivePaceSec}
-        station1PauseSec={strategy.station1PauseSec}
-        station2PauseSec={strategy.station2PauseSec}
+        effectivePaceSec={plan.effectivePaceSec}
+        station1PauseSec={stopSecByKm[5] ?? 0}
+        station2PauseSec={stopSecByKm[10] ?? 0}
         wetsuit={wetsuit}
-        lakeCondition={lakeCondition}
+        lakeCondition={surface}
       />
 
-      {/* Main Grid: Controls vs Race Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Controls Column (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-5">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2 border-b border-slate-800 pb-3">
-              <Sliders className="w-4 h-4 text-cyan-400" />
-              <span>Variables de Ritmo & Preparación</span>
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        <div className="space-y-6 lg:col-span-5">
+          <div className="space-y-5 rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
+            <h3 className="flex items-center gap-2 border-b border-slate-800 pb-3 text-sm font-bold text-white">
+              <Sliders className="h-4 w-4 text-cyan-400" />
+              <span>Ritmo y condiciones</span>
             </h3>
 
-            {/* Target Pace Slider */}
             <div>
-              <div className="flex items-center justify-between text-xs mb-2">
-                <span className="text-slate-300 font-medium">Ritmo base, agua calma:</span>
-                <span className="font-mono font-bold text-cyan-400 text-sm">
-                  {formatPace(targetPaceSec)}
-                </span>
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className="font-medium text-slate-300">Ritmo objetivo en agua calma</span>
+                <span className="font-mono text-sm font-bold text-cyan-400">{formatPace(targetPaceSec)}</span>
               </div>
               <input
                 type="range"
-                min={85}
-                max={180}
+                min={70}
+                max={220}
                 step={1}
                 value={targetPaceSec}
-                onChange={(e) => setTargetPaceSec(Number(e.target.value))}
-                className="w-full accent-cyan-500 cursor-pointer"
+                onChange={event => setTargetPaceSec(Number(event.target.value))}
+                className="w-full cursor-pointer accent-cyan-500"
+                aria-label="Ritmo objetivo"
               />
-              <div className="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
-                <span>1:25</span>
-                <span>2:10</span>
-                <span>3:00 /100m</span>
+              <div className="mt-1 flex justify-between font-mono text-[10px] text-slate-500">
+                <span>1:10</span>
+                <span>2:25</span>
+                <span>3:40 /100m</span>
               </div>
+
               <div className="mt-3 flex flex-col gap-3 rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <span className="block text-[10px] font-semibold uppercase text-cyan-300">Recomendación desde tus datos</span>
-                  <span className="font-mono text-lg font-bold text-white">{hasPaceRecommendation ? formatPace(recommendedPace) : 'Sin datos suficientes'}</span>
+                  <span className="block text-[10px] font-semibold uppercase text-cyan-300">Proyección desde tus datos</span>
+                  <span className="font-mono text-lg font-bold text-white">
+                    {hasProjection ? formatPace(recommendedPace) : 'N/D'}
+                  </span>
                   <p className="text-[10px] text-slate-400">
-                    {hasPaceRecommendation
-                      ? `Predicción total a este ritmo y con estas condiciones: ${recommendedStrategy.totalOfficialRaceString}`
-                      : 'El ritmo inicial es provisional hasta registrar una tirada válida.'}
+                    {hasProjection
+                      ? `Con estas condiciones: ${formatDuration(recommendedPlan.totalRaceSec)} · margen ${signed(recommendedPlan.finishMarginSec)}`
+                      : 'Faltan sesiones de 1,5 km o más para proyectar un ritmo.'}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setTargetPaceSec(recommendedPace)}
-                  disabled={!hasPaceRecommendation}
+                  disabled={!hasProjection}
                   className="inline-flex shrink-0 items-center justify-center gap-2 rounded-md border border-cyan-500/30 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <TrendingUp className="h-3.5 w-3.5" />
-                  Aplicar recomendación
+                  Aplicar
                 </button>
               </div>
             </div>
 
-            {/* Neoprene Wetsuit Toggle */}
-            <div className="pt-3 border-t border-slate-800/80">
+            <div className="border-t border-slate-800/80 pt-3">
+              <span className="mb-2 block text-xs font-medium text-slate-200">Estado del agua</span>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['calm', 'Calma'],
+                  ['light_chop', 'Marejadilla'],
+                  ['headwind', 'Viento de cara'],
+                ] as [SurfaceState, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSurface(id)}
+                    className={`rounded-lg border p-2 text-xs font-semibold ${surface === id ? 'border-blue-500/40 bg-blue-500/20 text-blue-300' : 'border-slate-800 bg-slate-950 text-slate-400'}`}
+                  >
+                    {label}
+                    <span className="block text-[9px] font-normal text-slate-500">+{SURFACE_PENALTY[id]} s/100m</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border-t border-slate-800/80 pt-3">
+              <span className="mb-2 block text-xs font-medium text-slate-200">Precisión de trazada</span>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  ['tight', 'Ajustada'],
+                  ['normal', 'Normal'],
+                  ['wide', 'Amplia'],
+                ] as [SightingState, string][]).map(([id, label]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setSighting(id)}
+                    className={`rounded-lg border p-2 text-xs font-semibold ${sighting === id ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300' : 'border-slate-800 bg-slate-950 text-slate-400'}`}
+                  >
+                    {label}
+                    <span className="block text-[9px] font-normal text-slate-500">+{NAVIGATION_PENALTY[id]}% dist.</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-800/80 pt-3">
+              <div>
+                <span className="block text-xs font-medium text-slate-200">Neopreno</span>
+                <span className="text-[11px] text-slate-400">Flotabilidad: −4,5 s/100 m</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWetsuit(value => !value)}
+                aria-pressed={wetsuit}
+                className={`h-6 w-12 cursor-pointer rounded-full p-1 transition-colors ${wetsuit ? 'bg-cyan-500' : 'bg-slate-800'}`}
+              >
+                <div className={`h-4 w-4 rounded-full bg-white transition-transform ${wetsuit ? 'translate-x-6' : 'translate-x-0'}`} />
+              </button>
+            </div>
+
+            <div className="border-t border-slate-800/80 pt-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs font-medium text-slate-200 block">
-                    Traje de Neopreno (Wetsuit)
-                  </span>
+                  <span className="block text-xs font-medium text-slate-200">Paradas en avituallamiento</span>
                   <span className="text-[11px] text-slate-400">
-                    Aporta flotabilidad clave en agua dulce del lago (-4.5s/100m)
+                    {autoStops ? 'Ajustadas al margen disponible' : `${manualStopSec}s en cada punto`}
                   </span>
                 </div>
                 <button
-                  onClick={() => setWetsuit(prev => !prev)}
-                  className={`w-12 h-6 rounded-full transition-colors p-1 cursor-pointer ${wetsuit ? 'bg-cyan-500' : 'bg-slate-800'
-                    }`}
-                  aria-label="Alternar uso de neopreno"
+                  type="button"
+                  onClick={() => setAutoStops(value => !value)}
+                  aria-pressed={autoStops}
+                  className={`h-6 w-12 cursor-pointer rounded-full p-1 transition-colors ${autoStops ? 'bg-cyan-500' : 'bg-slate-800'}`}
                 >
-                  <div
-                    className={`w-4 h-4 rounded-full bg-white transition-transform ${wetsuit ? 'translate-x-6' : 'translate-x-0'
-                      }`}
-                  />
+                  <div className={`h-4 w-4 rounded-full bg-white transition-transform ${autoStops ? 'translate-x-6' : 'translate-x-0'}`} />
                 </button>
               </div>
-            </div>
-
-            {/* Sighting Frequency */}
-            <div className="pt-3 border-t border-slate-800/80">
-              <span className="text-xs font-medium text-slate-200 block mb-2">
-                Frecuencia de Avistamiento de Boyas (Sighting)
-              </span>
-              <div className="grid grid-cols-4 gap-2">
-                {[4, 6, 8, 12].map((strokes) => (
-                  <button
-                    key={strokes}
-                    onClick={() => setSightingStrokes(strokes)}
-                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${sightingStrokes === strokes
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                      }`}
-                  >
-                    c/ {strokes} brazadas
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Fatigue Strategy */}
-            <div className="pt-3 border-t border-slate-800/80">
-              <span className="text-xs font-medium text-slate-200 block mb-2">
-                Perfil de Gestión en Plataforma Flotante
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'high', label: 'Rápida / Élite', desc: 'Paradas cortas (45-75s)' },
-                  { id: 'medium', label: 'Equilibrada', desc: 'Pausas estándar (60-110s)' },
-                  { id: 'conservative', label: 'Conservadora', desc: 'Pausa amplia (80-150s)' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setFatigueStrategy(item.id as any)}
-                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${fatigueStrategy === item.id
-                      ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                      : 'bg-slate-950 text-slate-400 border-slate-800 hover:border-slate-700'
-                      }`}
-                  >
-                    <div>{item.label}</div>
-                    <div className="text-[9px] text-slate-500 font-normal">{item.desc}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Lake Surface */}
-            <div className="pt-3 border-t border-slate-800/80">
-              <span className="text-xs font-medium text-slate-200 block mb-2">
-                Condición del Agua del Lago d'Orta
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: 'calm', label: 'Calma Total' },
-                  { id: 'light_chop', label: 'Brisa Ligera' },
-                  { id: 'headwind', label: 'Viento Térmico' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setLakeCondition(item.id as any)}
-                    className={`p-2 rounded-lg text-xs font-semibold border transition-colors cursor-pointer text-center ${lakeCondition === item.id
-                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                      : 'bg-slate-950 text-slate-400 border-slate-800'
-                      }`}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
+              {!autoStops && (
+                <input
+                  type="range"
+                  min={0}
+                  max={300}
+                  step={15}
+                  value={manualStopSec}
+                  onChange={event => setManualStopSec(Number(event.target.value))}
+                  className="mt-3 w-full cursor-pointer accent-cyan-500"
+                  aria-label="Segundos de parada en cada avituallamiento"
+                />
+              )}
             </div>
           </div>
         </div>
 
-        {/* Output Column (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
-          {/* Main Outcome Card */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">
-                Tiempo Total Oficial Proyectado (Nado + Pausas en Estaciones)
-              </span>
-              {strategy.isWithinOfficialCutoff ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Dentro de Corte Oficial (+{strategy.finishMarginMin} min de margen)</span>
+        <div className="space-y-6 lg:col-span-7">
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">Tiempo total proyectado</span>
+              {plan.isWithinCutoff ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  Dentro del corte · {signed(plan.finishMarginSec)}
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-500/15 border border-rose-500/30 text-rose-300">
-                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Supera tiempo límite oficial de 6h 00m</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-rose-500/30 bg-rose-500/15 px-2.5 py-1 text-xs font-semibold text-rose-300">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  Fuera de corte · {signed(plan.finishMarginSec)}
                 </span>
               )}
             </div>
 
-            <div className="flex flex-wrap items-baseline justify-between gap-4 mb-6">
+            <div className="mb-6 flex flex-wrap items-baseline justify-between gap-4">
               <div>
-                <span className="text-4xl sm:text-5xl font-black font-mono text-white tracking-tight tabular-nums">
-                  {strategy.totalOfficialRaceString}
+                <span className="font-mono text-4xl font-black tabular-nums tracking-tight text-white sm:text-5xl">
+                  {formatDuration(plan.totalRaceSec)}
                 </span>
-                <span className="text-xs text-slate-400 block mt-1">
-                  Ritmo efectivo global: <strong className="text-cyan-400 font-mono">{formatPace(strategy.effectivePaceSec)}</strong> · Límite oficial: 6h 00min (03:30 PM)
+                <span className="mt-1 block text-xs text-slate-400">
+                  Llegada {plan.finishClock} · ritmo efectivo{' '}
+                  <strong className="font-mono text-cyan-400">{formatPace(plan.effectivePaceSec)}</strong> · límite 6h 00m
                 </span>
               </div>
-
               <div className="text-right">
-                <span className="text-xs text-slate-400 block">Distancia estimada</span>
-                <span className="text-lg font-bold font-mono text-slate-200 tabular-nums">
-                  {strategy.effectiveDistanceMeters.toLocaleString('es-ES')} m
+                <span className="block text-xs text-slate-400">Distancia real estimada</span>
+                <span className="font-mono text-lg font-bold tabular-nums text-slate-200">
+                  {plan.effectiveDistanceM.toLocaleString('es-ES')} m
                 </span>
-                <span className="text-[11px] text-slate-500 block">con desvío de boyas y sighting</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-slate-800 text-xs">
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-400 block text-[10px] flex items-center gap-1">
-                  <Timer className="w-3 h-3 text-cyan-400" />
-                  <span>Nado neto</span>
-                </span>
-                <span className="font-mono font-bold text-white text-base tabular-nums">
-                  {strategy.pureSwimMovingString}
-                </span>
+            <div className="grid grid-cols-1 gap-3 border-t border-slate-800 pt-4 text-xs sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                <span className="block text-[10px] text-slate-400">Tiempo nadando</span>
+                <span className="font-mono text-base font-bold tabular-nums text-white">{formatDuration(plan.swimTimeSec)}</span>
               </div>
-
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-400 block text-[10px] flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  <span>Presupuesto de paradas para el corte de 6h</span>
-                </span>
-                <span className="font-mono font-bold text-amber-400 text-base tabular-nums">
-                  {formatDuration(availableFeedTimeSec)}
-                </span>
-                <span className="block mt-1 text-[10px] text-slate-500">
-                  Pausas previstas: {formatDuration(strategy.totalRestPauseSec)} · restante: {remainingCutoffLabel}
-                </span>
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                <span className="block text-[10px] text-slate-400">Parada total disponible</span>
+                <span className="font-mono text-base font-bold tabular-nums text-amber-400">{formatDuration(plan.stopBudgetSec)}</span>
+                <span className="mt-1 block text-[10px] text-slate-500">Planificado: {formatDuration(plan.totalStopSec)}</span>
               </div>
-
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <span className="text-slate-400 block text-[10px] flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-amber-400" />
-                  <span>Margen tras avituallamientos</span>
-                </span>
-                <span className={`font-mono font-bold text-base tabular-nums ${remainingCutoffSec >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {remainingCutoffLabel}
+              <div className="rounded-xl border border-slate-800 bg-slate-950 p-3">
+                <span className="block text-[10px] text-slate-400">Tiempo sobrante al final</span>
+                <span className={`font-mono text-base font-bold tabular-nums ${plan.finishMarginSec >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {signed(plan.finishMarginSec)}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Deep Dive: The 2 Official Floating Feed Stations */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Droplet className="w-4 h-4 text-cyan-400" />
-              <span>Avituallamientos y margen de corte</span>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-white">
+              <Clock className="h-4 w-4 text-cyan-400" />
+              <span>Avituallamientos · tiempo disponible</span>
             </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Station 1 Card */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-950 text-cyan-300 border border-cyan-800">
-                    Estación Flotante #1 · Km 5.0
-                  </span>
-                  <span className={`text-xs font-mono font-bold ${strategy.station1.isCutoffSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {strategy.station1.marginBeforeCutoffMin >= 0 ? '+' : ''}{strategy.station1.marginBeforeCutoffMin} min al corte
-                  </span>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">{strategy.station1.name}</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Llegada proyectada: <strong className="text-amber-400 font-mono">{strategy.station1.estimatedArrivalClock}</strong> (Corte: 11:45 AM)</p>
-                </div>
-                <div className="space-y-1 text-xs">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {plan.feedPoints.map(point => (
+                <div key={point.km} className="space-y-2 rounded-xl border border-slate-800 bg-slate-950 p-4 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="rounded border border-cyan-800 bg-cyan-950 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                      Km {point.km}
+                    </span>
+                    <span className={`font-mono text-xs font-bold ${point.isSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {signed(point.marginSec)} al corte
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white">{point.label}</h4>
                   <div className="flex justify-between text-slate-300">
-                    <span>Tiempo de parada recomendado:</span>
-                    <strong className="text-cyan-400 font-mono">{strategy.station1.recommendedPauseString}</strong>
+                    <span>Llegada estimada</span>
+                    <strong className="font-mono text-amber-400">{point.arrivalClock}</strong>
                   </div>
                   <div className="flex justify-between text-slate-300">
-                    <span>Presupuesto libre de paradas tras este punto:</span>
-                    <strong className="text-amber-300 font-mono">{formatFeedBudget(availableFeedTimeSec - strategy.station1PauseSec)}</strong>
+                    <span>Corte oficial</span>
+                    <span className="font-mono text-slate-400">{formatDuration(point.cutoffSec)}</span>
                   </div>
                   <div className="flex justify-between text-slate-300">
-                    <span>Índice de fatiga:</span>
-                    <span className="text-amber-400 font-mono font-bold">{strategy.station1.fatigueIndexPct}% (Moderada)</span>
+                    <span>Parada planificada</span>
+                    <strong className="font-mono text-cyan-400">{formatDuration(point.plannedStopSec)}</strong>
                   </div>
                   <div className="flex justify-between text-slate-300">
-                    <span>Ciclos completados:</span>
-                    <span className="text-slate-400 font-mono">~{strategy.station1.strokeCountAtArrival.toLocaleString('es-ES')} brazadas</span>
+                    <span>Parada aún disponible</span>
+                    <strong className={`font-mono ${point.remainingBudgetSec >= 0 ? 'text-amber-300' : 'text-rose-400'}`}>
+                      {formatDuration(Math.max(0, point.remainingBudgetSec))}
+                    </strong>
                   </div>
                 </div>
-                <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300">
-                  <span className="font-semibold text-cyan-300 block mb-0.5">Nutrición en Plataforma:</span>
-                  {strategy.station1.nutritionAction}
-                </div>
-              </div>
-
-              {/* Station 2 Card */}
-              <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-950 text-amber-300 border border-amber-800">
-                    Estación Flotante #2 · Km 10.0
-                  </span>
-                  <span className={`text-xs font-mono font-bold ${strategy.station2.isCutoffSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {strategy.station2.marginBeforeCutoffMin >= 0 ? '+' : ''}{strategy.station2.marginBeforeCutoffMin} min al corte
-                  </span>
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white">{strategy.station2.name}</h4>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Llegada proyectada: <strong className="text-amber-400 font-mono">{strategy.station2.estimatedArrivalClock}</strong> (Corte: 02:00 PM)</p>
-                </div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between text-slate-300">
-                    <span>Tiempo de parada recomendado:</span>
-                    <strong className="text-cyan-400 font-mono">{strategy.station2.recommendedPauseString}</strong>
-                  </div>
-                  <div className="flex justify-between text-slate-300">
-                    <span>Presupuesto libre de paradas tras este punto:</span>
-                    <strong className="text-amber-300 font-mono">{formatFeedBudget(availableFeedTimeSec - strategy.totalRestPauseSec)}</strong>
-                  </div>
-                  <div className="flex justify-between text-slate-300">
-                    <span>Índice de fatiga:</span>
-                    <span className="text-rose-400 font-mono font-bold">{strategy.station2.fatigueIndexPct}% (Avanzada)</span>
-                  </div>
-                  <div className="flex justify-between text-slate-300">
-                    <span>Ciclos completados:</span>
-                    <span className="text-slate-400 font-mono">~{strategy.station2.strokeCountAtArrival.toLocaleString('es-ES')} brazadas</span>
-                  </div>
-                </div>
-                <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-[11px] text-slate-300">
-                  <span className="font-semibold text-amber-300 block mb-0.5">Nutrición en Plataforma:</span>
-                  {strategy.station2.nutritionAction}
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Sector-by-sector race projection */}
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-6">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
-              <MapPin className="w-4 h-4 text-rose-400" />
-              <span>Sectores, ritmos y paso por puntos oficiales</span>
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
+            <h3 className="mb-4 flex items-center gap-2 text-sm font-bold text-white">
+              <MapPin className="h-4 w-4 text-rose-400" />
+              <span>Desglose kilómetro a kilómetro</span>
             </h3>
-
             <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full min-w-[980px] text-left text-xs">
-                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+              <table className="w-full min-w-[720px] text-left text-xs">
+                <thead className="border-b border-slate-800 bg-slate-950 text-slate-400">
                   <tr>
-                    <th className="py-2.5 px-3 font-semibold">Sector / llegada</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Distancia</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Ritmo</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Nado sector</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Pausa feeding</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Acumulado</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Hora paso</th>
-                    <th className="py-2.5 px-3 text-right font-semibold">Corte / margen</th>
+                    <th className="px-3 py-2.5 font-semibold">Km</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Ritmo</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Parcial</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Parada</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Acumulado</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Hora</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Margen</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums text-slate-300">
-                  {sectorRows.map((row) => (
-                    <tr key={row.km} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-2.5 px-3 font-sans font-medium text-white">
-                        <div>{row.km === 0 ? 'Salida' : `${(row.km - row.distanceKm).toFixed(1)}–${row.km.toFixed(1)} km · ${row.name}`}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{row.pauseNote}</div>
-                      </td>
-                      <td className="py-2.5 px-3 text-right">{row.distanceKm > 0 ? `${row.distanceKm.toFixed(1)} km` : '—'}</td>
-                      <td className="py-2.5 px-3 text-right font-semibold text-cyan-300">
-                        {row.distanceKm > 0 ? formatPace(strategy.effectivePaceSec) : '—'}
-                      </td>
-                      <td className="py-2.5 px-3 text-right">{row.distanceKm > 0 ? formatDuration(row.sectorTimeSec) : '—'}</td>
-                      <td className="py-2.5 px-3 text-right text-amber-300">
-                        {row.pauseSec > 0 ? formatDuration(row.pauseSec) : '—'}
-                      </td>
-                      <td className="py-2.5 px-3 text-right font-semibold">{formatDuration(row.elapsedSec)}</td>
-                      <td className="py-2.5 px-3 text-right font-bold text-amber-400">{row.clockTime}</td>
-                      <td className="py-2.5 px-3 text-right text-[11px]">
-                        {row.cutoffStr}
-                        {row.marginMin !== null && (
-                          <span className={`ml-1 ${row.isCutoffSafe ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            ({row.marginMin >= 0 ? '+' : ''}{row.marginMin}m)
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {plan.splits.map(split => {
+                    const remainingToCutoff = RACE_CUTOFF_SEC - split.cumulativeSec;
+                    return (
+                      <tr key={split.km} className={split.isFeedPoint ? 'bg-cyan-950/20' : undefined}>
+                        <td className="px-3 py-2 font-sans font-semibold text-white">
+                          {split.km}
+                          {split.isFeedPoint && (
+                            <span className="ml-2 rounded bg-cyan-900/60 px-1.5 py-0.5 text-[9px] font-bold text-cyan-300">
+                              Avituallamiento
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right text-cyan-300">{formatPace(split.pacePer100mSec)}</td>
+                        <td className="px-3 py-2 text-right">{formatDuration(split.splitSec)}</td>
+                        <td className="px-3 py-2 text-right text-amber-300">
+                          {split.stopSec > 0 ? formatDuration(split.stopSec) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold text-white">{formatDuration(split.cumulativeSec)}</td>
+                        <td className="px-3 py-2 text-right text-amber-400">{split.clockTime}</td>
+                        <td className={`px-3 py-2 text-right ${remainingToCutoff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {signed(split.marginSec ?? remainingToCutoff)}
+                          {split.isFeedPoint && <span className="ml-1 text-[9px] text-slate-500">corte</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
+            <p className="mt-3 text-[10px] text-slate-500">
+              El margen de los kilómetros sin corte muestra el tiempo que te sobraría frente al límite de 6 h si mantienes
+              ese ritmo; en los kilómetros 5 y 10 se compara contra el corte oficial de cada punto.
+            </p>
           </div>
         </div>
       </div>

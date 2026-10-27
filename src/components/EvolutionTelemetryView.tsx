@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Activity, 
-  TrendingUp, 
-  Compass, 
-  Waves, 
-  Filter, 
-  Info, 
+import {
+  Activity,
+  TrendingUp,
+  Compass,
+  Waves,
+  Filter,
+  Info,
   Zap,
   BarChart2,
   Calendar,
@@ -24,9 +24,9 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   activities,
   onSelectActivity,
 }) => {
-  const [metricTab, setMetricTab] = useState<'pace' | 'cadence' | 'dps' | 'swolf' | 'distance' | 'heartRate'>('pace');
+  const [metricTab, setMetricTab] = useState<'pace' | 'cadence' | 'dps' | 'swolf' | 'spl' | 'distance' | 'heartRate'>('pace');
   const [timeGrouping, setTimeGrouping] = useState<'weekly' | 'monthly'>('weekly');
-  const [typeFilter, setTypeFilter] = useState<'all' | 'open_water' | 'pool'>('all');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'open_water' | 'pool' | 'unknown'>('all');
   const [minDistFilter, setMinDistFilter] = useState<number>(0);
   const [hoveredPoint, setHoveredPoint] = useState<SwimActivity | null>(null);
 
@@ -80,25 +80,25 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
   // Summary stats
   const stats = useMemo(() => {
     if (filteredActivities.length === 0) {
-      return { avgPace: 0, bestPace: 0, avgCadence: 0, avgDps: 0, avgSwolf: 0, totalKm: 0, totalHours: 0 };
+      return { avgPace: null, bestPace: null, avgCadence: null, avgDps: null, avgSwolf: null, avgSpl: null, totalKm: 0, totalHours: 0 };
     }
     const totalDist = filteredActivities.reduce((acc, a) => acc + a.distance, 0);
-    const totalTime = filteredActivities.reduce((acc, a) => acc + a.movingTime, 0);
-    const avgPace = (totalTime / totalDist) * 100;
-    const bestPace = Math.min(...filteredActivities.map(a => a.pacePer100m));
-    const cadences = filteredActivities.filter(a => a.averageCadence).map(a => a.averageCadence!);
-    const avgCadence = cadences.length > 0 ? Math.round(cadences.reduce((a, b) => a + b, 0) / cadences.length) : 0;
-    const dpsList = filteredActivities.filter(a => a.dps).map(a => a.dps!);
-    const avgDps = dpsList.length > 0 ? dpsList.reduce((a, b) => a + b, 0) / dpsList.length : 0;
-    const swolfList = filteredActivities.filter(a => a.swolf).map(a => a.swolf!);
-    const avgSwolf = swolfList.length > 0 ? Math.round(swolfList.reduce((a, b) => a + b, 0) / swolfList.length) : 0;
+    const paceSessions = filteredActivities.filter(activity => activity.distance > 0 && activity.movingTime > 0);
+    const totalTime = paceSessions.reduce((acc, activity) => acc + activity.movingTime, 0);
+    const paceDistance = paceSessions.reduce((acc, activity) => acc + activity.distance, 0);
+    const paces = paceSessions.map(activity => activity.movingTime / activity.distance * 100);
+    const cadences = filteredActivities.filter(a => a.hasRecordedCadence && a.averageCadence !== undefined).map(a => a.averageCadence!);
+    const dpsList = filteredActivities.filter(a => a.hasRecordedDps && a.dps !== undefined).map(a => a.dps!);
+    const swolfList = filteredActivities.filter(a => a.type === 'pool' && a.poolLength === 25 && a.hasRecordedSwolf && a.swolf !== undefined).map(a => a.swolf!);
+    const splList = filteredActivities.filter(a => a.type === 'pool' && a.poolLength === 25 && a.hasRecordedSpl && a.strokesPerLength !== undefined).map(a => a.strokesPerLength!);
 
     return {
-      avgPace: Math.round(avgPace),
-      bestPace: Math.round(bestPace),
-      avgCadence,
-      avgDps: Number(avgDps.toFixed(2)),
-      avgSwolf,
+      avgPace: paceDistance > 0 ? Math.round(totalTime / paceDistance * 100) : null,
+      bestPace: paces.length > 0 ? Math.round(Math.min(...paces)) : null,
+      avgCadence: cadences.length > 0 ? Math.round(cadences.reduce((a, b) => a + b, 0) / cadences.length) : null,
+      avgDps: dpsList.length > 0 ? Number((dpsList.reduce((a, b) => a + b, 0) / dpsList.length).toFixed(2)) : null,
+      avgSwolf: swolfList.length > 0 ? Math.round(swolfList.reduce((a, b) => a + b, 0) / swolfList.length) : null,
+      avgSpl: splList.length > 0 ? Number((splList.reduce((a, b) => a + b, 0) / splList.length).toFixed(1)) : null,
       totalKm: Number((totalDist / 1000).toFixed(1)),
       totalHours: Number((totalTime / 3600).toFixed(1)),
     };
@@ -116,12 +116,16 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
 
     const values = groupedActivities.map(({ activities: sessions }): number | null => {
       if (metricTab === 'pace') {
-        const distance = sessions.reduce((sum, activity) => sum + activity.distance, 0);
-        const movingTime = sessions.reduce((sum, activity) => sum + activity.movingTime, 0);
-        return distance > 0 ? (movingTime / distance) * 100 : 0;
+        const validSessions = sessions.filter(activity => activity.distance > 0 && activity.movingTime > 0);
+        const distance = validSessions.reduce((sum, activity) => sum + activity.distance, 0);
+        const movingTime = validSessions.reduce((sum, activity) => sum + activity.movingTime, 0);
+        return distance > 0 ? (movingTime / distance) * 100 : null;
       }
       if (metricTab === 'distance') {
-        return sessions.reduce((sum, activity) => sum + activity.distance, 0) / sessions.length / 1000;
+        const validSessions = sessions.filter(activity => activity.distance > 0);
+        return validSessions.length > 0
+          ? validSessions.reduce((sum, activity) => sum + activity.distance, 0) / validSessions.length / 1000
+          : null;
       }
       if (metricTab === 'heartRate') {
         const heartRates = sessions
@@ -133,11 +137,12 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
       }
 
       const metrics = sessions.map(activity => {
-        if (metricTab === 'cadence') return activity.averageCadence || 62;
-        if (metricTab === 'dps') return activity.dps || 1.6;
-        return activity.swolf || 75;
-      });
-      return metrics.reduce((sum, value) => sum + value, 0) / metrics.length;
+        if (metricTab === 'cadence') return activity.hasRecordedCadence ? activity.averageCadence : undefined;
+        if (metricTab === 'dps') return activity.hasRecordedDps ? activity.dps : undefined;
+        if (metricTab === 'swolf') return activity.type === 'pool' && activity.poolLength === 25 && activity.hasRecordedSwolf ? activity.swolf : undefined;
+        return activity.type === 'pool' && activity.poolLength === 25 && activity.hasRecordedSpl ? activity.strokesPerLength : undefined;
+      }).filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+      return metrics.length > 0 ? metrics.reduce((sum, value) => sum + value, 0) / metrics.length : null;
     });
 
     const validValues = values.filter((value): value is number => value !== null);
@@ -209,7 +214,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <span className="text-[11px] text-slate-400 block font-medium">Ritmo Medio /100m</span>
           <span className="text-xl sm:text-2xl font-bold font-mono text-cyan-400 tabular-nums">
-            {formatPace(stats.avgPace)}
+            {stats.avgPace === null ? 'N/D' : formatPace(stats.avgPace)}
           </span>
           <span className="text-[10px] text-slate-500 block mt-1">Ritmo global continuo</span>
         </div>
@@ -217,7 +222,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <span className="text-[11px] text-slate-400 block font-medium">Mejor Ritmo Registrado</span>
           <span className="text-xl sm:text-2xl font-bold font-mono text-emerald-400 tabular-nums">
-            {formatPace(stats.bestPace)}
+            {stats.bestPace === null ? 'N/D' : formatPace(stats.bestPace)}
           </span>
           <span className="text-[10px] text-slate-500 block mt-1">Pico umbral</span>
         </div>
@@ -226,28 +231,27 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
           <span className="text-[11px] text-slate-400 block font-medium">Cadencia Media</span>
           <div className="flex items-baseline gap-1">
             <span className="text-xl sm:text-2xl font-bold font-mono text-amber-400 tabular-nums">
-              {stats.avgCadence}
+              {stats.avgCadence ?? 'N/D'}
             </span>
-            <span className="text-xs text-slate-400">SPM</span>
           </div>
           <span className="text-[10px] text-slate-500 block mt-1">Brazadas por minuto</span>
         </div>
 
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
-          <span className="text-[11px] text-slate-400 block font-medium">Deslizamiento DPS</span>
+          <span className="text-[11px] text-slate-400 block font-medium">SPL registrado · 25 m</span>
           <div className="flex items-baseline gap-1">
             <span className="text-xl sm:text-2xl font-bold font-mono text-blue-400 tabular-nums">
-              {stats.avgDps}
+              {stats.avgSpl ?? 'N/D'}
             </span>
-            <span className="text-xs text-slate-400">m/ciclo</span>
+            <span className="text-xs text-slate-400">brazadas/largo</span>
           </div>
-          <span className="text-[10px] text-slate-500 block mt-1">Metros por ciclo de brazada</span>
+          <span className="text-[10px] text-slate-500 block mt-1">Sin dato directo en el CSV</span>
         </div>
 
         <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4">
           <span className="text-[11px] text-slate-400 block font-medium">Puntuación SWOLF</span>
           <span className="text-xl sm:text-2xl font-bold font-mono text-violet-400 tabular-nums">
-            {stats.avgSwolf}
+            {stats.avgSwolf ?? 'N/D'}
           </span>
           <span className="text-[10px] text-slate-500 block mt-1">Eficiencia hidrodinámica</span>
         </div>
@@ -281,49 +285,50 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
           <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-950 rounded-lg border border-slate-800 text-xs font-semibold">
             <button
               onClick={() => setMetricTab('pace')}
-              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                metricTab === 'pace' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'pace' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Ritmo /100m
             </button>
             <button
               onClick={() => setMetricTab('cadence')}
-              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                metricTab === 'cadence' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'cadence' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
-              Cadencia (SPM)
+              Cadencia (export)
             </button>
             <button
               onClick={() => setMetricTab('dps')}
-              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                metricTab === 'dps' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'dps' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Deslizamiento (DPS)
             </button>
             <button
               onClick={() => setMetricTab('swolf')}
-              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                metricTab === 'swolf' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'swolf' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
-              SWOLF
+              SWOLF (25 m)
+            </button>
+            <button
+              onClick={() => setMetricTab('spl')}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'spl' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
+            >
+              SPL (25 m)
             </button>
             <button
               onClick={() => setMetricTab('distance')}
-              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                metricTab === 'distance' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'distance' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Distancia media/sesión
             </button>
             <button
               onClick={() => setMetricTab('heartRate')}
-              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${
-                metricTab === 'heartRate' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
-              }`}
+              className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer whitespace-nowrap ${metricTab === 'heartRate' ? 'bg-cyan-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'
+                }`}
             >
               Pulsaciones medias
             </button>
@@ -340,27 +345,31 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
             <div className="flex items-center gap-1">
               <button
                 onClick={() => setTypeFilter('all')}
-                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                  typeFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${typeFilter === 'all' ? 'bg-slate-800 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Todos ({activities.length})
               </button>
               <button
                 onClick={() => setTypeFilter('open_water')}
-                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                  typeFilter === 'open_water' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${typeFilter === 'open_water' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Aguas Abiertas ({activities.filter(a => a.type === 'open_water').length})
               </button>
               <button
                 onClick={() => setTypeFilter('pool')}
-                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${
-                  typeFilter === 'pool' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:text-slate-200'
-                }`}
+                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${typeFilter === 'pool' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'text-slate-400 hover:text-slate-200'
+                  }`}
               >
                 Piscina ({activities.filter(a => a.type === 'pool').length})
+              </button>
+              <button
+                onClick={() => setTypeFilter('unknown')}
+                className={`px-2.5 py-1 rounded text-xs font-semibold cursor-pointer ${typeFilter === 'unknown' ? 'bg-slate-700 text-slate-200 border border-slate-600' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+              >
+                Sin clasificar ({activities.filter(a => a.type === 'unknown').length})
               </button>
             </div>
           </div>
@@ -453,6 +462,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
               {/* Interactive Data Points */}
               {dataPoints.map((pt, i) => {
                 const isOpen = pt.act.type === 'open_water';
+                const pointColor = isOpen ? '#22d3ee' : pt.act.type === 'pool' ? '#3b82f6' : '#94a3b8';
                 const isHovered = hoveredPoint?.id === pt.act.id;
 
                 return (
@@ -461,7 +471,7 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                       cx={pt.x}
                       cy={pt.y}
                       r={isHovered ? 7 : (isOpen ? 4.5 : 3.5)}
-                      fill={isOpen ? '#22d3ee' : '#3b82f6'}
+                      fill={pointColor}
                       stroke="#020617"
                       strokeWidth="2"
                       pointerEvents="none"
@@ -485,15 +495,27 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
           </div>
         </div>
 
-        {metricTab === 'heartRate' && dataPoints.length === 0 && (
-          <p className="py-4 text-center text-xs text-slate-400">No hay pulsaciones registradas en las sesiones filtradas.</p>
+        {dataPoints.length === 0 && (
+          <p className="py-4 text-center text-xs text-slate-400">
+            {metricTab === 'heartRate'
+              ? 'No hay pulsaciones registradas en las sesiones filtradas.'
+              : metricTab === 'cadence'
+                ? 'No hay cadencia registrada en las sesiones filtradas.'
+                : metricTab === 'dps'
+                  ? 'No hay DPS medido directamente en las sesiones filtradas.'
+                  : metricTab === 'swolf'
+                    ? 'No hay SWOLF por largo en las sesiones filtradas.'
+                    : metricTab === 'spl'
+                      ? 'No hay brazadas por largo (SPL) registradas en las sesiones filtradas.'
+                      : 'No hay datos válidos para esta métrica.'}
+          </p>
         )}
 
         {/* Dynamic Hover Tooltip Preview */}
         {hoveredPoint && (
           <div className="mt-4 p-3 rounded-xl bg-slate-950 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-4 text-xs animate-in fade-in duration-200">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${hoveredPoint.type === 'open_water' ? 'bg-cyan-400' : 'bg-blue-400'}`} />
+              <span className={`w-2.5 h-2.5 rounded-full ${hoveredPoint.type === 'open_water' ? 'bg-cyan-400' : hoveredPoint.type === 'pool' ? 'bg-blue-400' : 'bg-slate-400'}`} />
               <strong className="text-white">{hoveredPoint.title}</strong>
               <span className="text-slate-400 font-mono">({hoveredPoint.date})</span>
             </div>
@@ -508,16 +530,27 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
                         : metricTab === 'pace'
                           ? formatPace(hoveredDataPoint.val)
                           : metricTab === 'cadence'
-                            ? `${Math.round(hoveredDataPoint.val)} SPM`
-                            : hoveredDataPoint.val.toFixed(2)}
+                            ? `${Math.round(hoveredDataPoint.val)} (unidad exportada)`
+                            : metricTab === 'spl'
+                              ? `${hoveredDataPoint.val.toFixed(1)} brazadas/largo`
+                              : hoveredDataPoint.val.toFixed(2)}
                   </strong> <span className="text-slate-500">({hoveredDataPoint.label}, {hoveredDataPoint.sessionCount} sesiones)</span>
                 </span>
               )}
               <span>Dist: <strong className="text-white">{formatDistance(hoveredPoint.distance)}</strong></span>
               <span>Ritmo: <strong className="text-cyan-400">{formatPace(hoveredPoint.pacePer100m)}</strong></span>
-              <span>Cadencia: <strong className="text-amber-400">{hoveredPoint.averageCadence} SPM</strong></span>
-              <span>DPS: <strong className="text-blue-400">{hoveredPoint.dps}m</strong></span>
-              <span>SWOLF: <strong className="text-violet-400">{hoveredPoint.swolf}</strong></span>
+              {hoveredPoint.hasRecordedCadence && hoveredPoint.averageCadence !== undefined && (
+                <span>Cadencia: <strong className="text-amber-400">{hoveredPoint.averageCadence} (export)</strong></span>
+              )}
+              {hoveredPoint.hasRecordedDps && hoveredPoint.dps !== undefined && (
+                <span>DPS: <strong className="text-blue-400">{hoveredPoint.dps}m</strong></span>
+              )}
+              {hoveredPoint.hasRecordedSwolf && hoveredPoint.swolf !== undefined && (
+                <span>SWOLF: <strong className="text-violet-400">{hoveredPoint.swolf}</strong></span>
+              )}
+              {hoveredPoint.hasRecordedSpl && hoveredPoint.strokesPerLength !== undefined && (
+                <span>SPL: <strong className="text-violet-300">{hoveredPoint.strokesPerLength}</strong></span>
+              )}
             </div>
           </div>
         )}
@@ -531,6 +564,10 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded-full bg-blue-500 inline-block" />
               <span>Piscina (25m / 50m)</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-slate-400 inline-block" />
+              <span>Sin clasificar</span>
             </span>
           </div>
           <span>Mostrando {filteredActivities.length} sesiones</span>

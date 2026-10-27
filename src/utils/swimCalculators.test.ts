@@ -1,14 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   formatPace,
   formatDuration,
   formatDistance,
   findPaceOutlierIds,
-  calculateDPS,
-  calculateStrokeIndex,
-  calculateSWOLF,
-  calculateOrtaFeedPauses,
   parseStravaCsv,
   recalculateSwimMetrics,
   getCalendarWeeklyMileage,
@@ -55,35 +52,7 @@ test('findPaceOutlierIds flags only extreme fast and slow paces', () => {
   assert.deepEqual(findPaceOutlierIds(activities.slice(0, 4)), []);
 });
 
-test('calculateDPS computes distance per stroke properly', () => {
-  // Speed: 1.25 m/s, Cadence: 60 spm (30 cycles/min) -> 0.5 cycles/sec -> DPS = 1.25 / 0.5 = 2.50m
-  const dps = calculateDPS(1.25, 60);
-  assert.equal(dps, 2.5);
-
-  // If cadence is stroke cycle (30 cpm -> 0.5 cycles/sec), speed 1.5 m/s -> DPS = 3.0m
-  const dpsCycle = calculateDPS(1.5, 30);
-  assert.equal(dpsCycle, 3.0);
-});
-
-test('calculateStrokeIndex computes speed * DPS', () => {
-  const si = calculateStrokeIndex(1.4, 1.8);
-  assert.equal(si, 2.52);
-});
-
-test('calculateSWOLF calculates reasonable score', () => {
-  const swolf = calculateSWOLF(100, 1.8, 50); // 1:40/100m in 50m pool = 50s + 56 strokes ≈ 106
-  assert.ok(swolf >= 95 && swolf <= 115);
-});
-
-test('calculateOrtaFeedPauses formats station arrivals in 12-hour clock time', () => {
-  const strategy = calculateOrtaFeedPauses(100, true, 6, 'calm', 'medium');
-
-  assert.equal(strategy.station1.estimatedArrivalClock, '10:56 AM');
-  assert.equal(strategy.station2.estimatedArrivalClock, '12:23 PM');
-  assert.equal(strategy.totalOfficialRaceSec, strategy.pureSwimMovingSec + strategy.totalRestPauseSec);
-});
-
-test('recalculateSwimMetrics uses a 20m pool before 2025-03-25 only', () => {
+test('recalculateSwimMetrics preserves recorded distance and clears unrecorded stroke metrics', () => {
   const baseActivity: SwimActivity = {
     id: 'pool-history',
     date: '2025-03-24',
@@ -91,57 +60,48 @@ test('recalculateSwimMetrics uses a 20m pool before 2025-03-25 only', () => {
     type: 'pool',
     distance: 2500,
     elapsedTime: 2100,
+    hasRecordedElapsedTime: true,
     movingTime: 2000,
+    hasRecordedMovingTime: true,
     pacePer100m: 100,
     averageCadence: 64,
     dps: 1.8,
     swolf: 100,
     poolLength: 25,
+    hasPoolLength: true,
     source: 'strava_csv',
   };
 
-  const corrected = recalculateSwimMetrics(baseActivity);
-  const currentPool = recalculateSwimMetrics({ ...baseActivity, date: '2025-03-25', poolLength: 50 });
-  const migratedLegacyPool = recalculateSwimMetrics({ ...baseActivity, poolLength: 20 });
-  const misclassifiedTitle = recalculateSwimMetrics({
-    ...baseActivity,
-    date: '2026-10-20',
-    title: "Road to Lago d'Orta",
-    type: 'open_water',
-    elevationHigh: 0,
-    elevationLow: 0,
-  });
+  const recorded20m = recalculateSwimMetrics({ ...baseActivity, date: '2024-03-24', poolLength: 20 });
+  const recorded25m = recalculateSwimMetrics({ ...baseActivity, date: '2024-03-24', poolLength: 25 });
+  const unknownType = recalculateSwimMetrics({ ...baseActivity, poolLength: null, hasPoolLength: false, elevationHigh: 0, elevationLow: 0 });
   const elevationDetected = recalculateSwimMetrics({
     ...baseActivity,
     date: '2026-10-20',
-    type: 'pool',
+    hasPoolLength: false,
+    poolLength: null,
     elevationHigh: 4,
     elevationLow: -2,
   });
 
-  assert.equal(corrected.poolLength, 20);
-  assert.equal(corrected.distance, 2000);
-  assert.equal(corrected.pacePer100m, 100);
-  assert.equal(corrected.swolf, calculateSWOLF(corrected.pacePer100m, corrected.dps || 0, 20));
-  const correctedAgain = recalculateSwimMetrics(corrected);
-  assert.equal(correctedAgain.distance, 2000);
-  assert.equal(correctedAgain.pacePer100m, 100);
-  assert.equal(migratedLegacyPool.distance, 2000);
-  assert.equal(migratedLegacyPool.pacePer100m, 100);
-  assert.equal(misclassifiedTitle.type, 'pool');
+  assert.equal(recorded20m.poolLength, 20);
+  assert.equal(recorded20m.distance, 2500);
+  assert.equal(recorded20m.pacePer100m, 80);
+  assert.equal(recorded20m.averageCadence, undefined);
+  assert.equal(recorded20m.dps, undefined);
+  assert.equal(recorded20m.swolf, undefined);
+  assert.equal(recorded25m.poolLength, 25);
+  assert.equal(recorded25m.distance, 2500);
+  assert.equal(unknownType.type, 'unknown');
   assert.equal(elevationDetected.type, 'open_water');
-  assert.equal(currentPool.poolLength, 50);
-  assert.equal(currentPool.distance, 2500);
-  assert.equal(currentPool.pacePer100m, 80);
-  assert.equal(currentPool.swolf, calculateSWOLF(currentPool.pacePer100m, currentPool.dps || 0, 50));
 });
 
-test('parseStravaCsv parses CSV format into valid swim activities', () => {
-  const sampleCsv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Average Heart Rate,Elevation High,Elevation Low
-1001,"2026-08-15 08:30:00","Entreno Travesía Mar Costa Brava",Swim,3900,3600,3500,138,0,0
-1002,"2026-08-18 19:00:00","Series Umbral 100m Piscina 50m",Swim,3200,2800,2500,145,0,0
-1003,"2026-08-20 10:00:00","Tirada Larga Lago",Swim,7200,6800,6000,140,4,-2
-1004,"2026-08-22 09:00:00","Rodaje Suave Bici",Ride,3600,3600,30000,120,0,0`;
+test('parseStravaCsv classifies only explicit pool length and GPS evidence', () => {
+  const sampleCsv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Pool Length,Average Heart Rate,Elevation High,Elevation Low
+1001,"2026-08-15 08:30:00","Entreno Travesía Mar Costa Brava",Swim,3900,3600,3500,25,138,0,0
+1002,"2026-08-18 19:00:00","Series Umbral 100m Piscina 50m",Swim,3200,2800,2500,50,145,0,0
+1003,"2026-08-20 10:00:00","Tirada Larga Lago",Swim,7200,6800,6000,,140,4,-2
+1004,"2026-08-22 09:00:00","Rodaje Suave Bici",Ride,3600,3600,30000,,120,0,0`;
 
   const parsed = parseStravaCsv(sampleCsv);
   assert.equal(parsed.length, 3); // 3 swims, ignoring the bike ride
@@ -153,18 +113,19 @@ test('parseStravaCsv parses CSV format into valid swim activities', () => {
   assert.equal(titledLikeOpenWater?.type, 'pool');
   assert.equal(openWater?.distance, 6000);
   assert.ok(openWater?.pacePer100m && openWater.pacePer100m > 0);
-  assert.ok(openWater?.dps && openWater.dps > 0);
+  assert.equal(openWater?.dps, undefined);
+  assert.equal(parsed.find(a => a.id === '1002')?.poolLength, 50);
 });
 
-test('parseStravaCsv does not infer open water from a lake title without elevation change', () => {
-  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Elevation High,Elevation Low
-lake,2026-10-01,"Road to Lago d'Orta",Swim,2400,2300,2000,0,0
-climb,2026-10-02,Pool name with noise,Swim,2400,2300,2000,1.0,0.2`;
+test('parseStravaCsv leaves type unknown without pool length or GPS evidence', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Pool Length,Elevation High,Elevation Low
+lake,2026-10-01,"Road to Lago d'Orta",Swim,2400,2300,2000,,0,0
+pool,2026-10-02,Pool name with noise,Swim,2400,2300,2000,25,1.0,0.2`;
 
   const parsed = parseStravaCsv(csv);
 
-  assert.equal(parsed.find(activity => activity.id === 'lake')?.type, 'pool');
-  assert.equal(parsed.find(activity => activity.id === 'climb')?.type, 'pool');
+  assert.equal(parsed.find(activity => activity.id === 'lake')?.type, 'unknown');
+  assert.equal(parsed.find(activity => activity.id === 'pool')?.type, 'pool');
 });
 
 test('parseStravaCsv uses recorded pool length to distinguish low-elevation open water', () => {
@@ -177,7 +138,7 @@ old-pool,2024-10-03,Old pool,Swim,2400,2300,2000,,0,0`;
 
   assert.equal(parsed.find(activity => activity.id === 'open-water')?.type, 'open_water');
   assert.equal(parsed.find(activity => activity.id === 'pool')?.type, 'pool');
-  assert.equal(parsed.find(activity => activity.id === 'old-pool')?.type, 'pool');
+  assert.equal(parsed.find(activity => activity.id === 'old-pool')?.type, 'unknown');
 });
 
 test('parseStravaCsv preserves commas, apostrophes, escaped quotes, and multiline cells', () => {
@@ -205,7 +166,45 @@ cadence,"Oct 26, 2026, 6:18:12 AM",Morning swim,Swim,1200,1000,25,22`;
   assert.equal(parsed[0].startedAt, '2026-10-26T06:18:12');
 });
 
-test('parseStravaCsv recalculates historical pool SWOLF with 20m length', () => {
+test('parseStravaCsv imports explicit cycle, stroke, SWOLF and SPL columns separately', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Moving Time,Elapsed Time,Distance,Pool Length,Total Cycles,Total Strokes,SWOLF,SPL
+lap-data,"Oct 26, 2026",Pool,Swim,600,700,500,25,48,96,72,24`;
+
+  const activity = parseStravaCsv(csv)[0];
+
+  assert.equal(activity.totalCycles, 48);
+  assert.equal(activity.totalStrokes, 96);
+  assert.equal(activity.swolf, 72);
+  assert.equal(activity.hasRecordedSwolf, true);
+  assert.equal(activity.strokesPerLength, 24);
+  assert.equal(activity.hasRecordedSpl, true);
+});
+
+test('parseStravaCsv leaves pace and moving ratio unavailable when source times are missing', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Distance,Pool Length
+no-times,"Oct 26, 2026",Pool,Swim,1000,25`;
+
+  const activity = parseStravaCsv(csv)[0];
+
+  assert.equal(activity.movingTime, 0);
+  assert.equal(activity.elapsedTime, 0);
+  assert.equal(activity.pacePer100m, 0);
+  assert.equal(activity.movingRatio, undefined);
+  assert.equal(activity.averageCadence, undefined);
+  assert.equal(activity.swolf, undefined);
+});
+
+test('activities.csv does not create SWOLF or SPL when those columns are absent', () => {
+  const csv = readFileSync(new URL('../../data/activities.csv', import.meta.url), 'utf8');
+  const activities = parseStravaCsv(csv);
+
+  assert.ok(activities.length > 0);
+  assert.equal(activities.filter(activity => activity.hasRecordedSwolf).length, 0);
+  assert.equal(activities.filter(activity => activity.hasRecordedSpl).length, 0);
+  assert.equal(activities.filter(activity => activity.totalCycles !== undefined).length, 0);
+});
+
+test('parseStravaCsv preserves explicitly recorded pool lengths without deriving SWOLF', () => {
   const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Pool Length
 old,2025-03-24,Old pool,Swim,2100,2000,2000,25
 current,2025-03-25,Current pool,Swim,2100,2000,2000,50`;
@@ -214,15 +213,14 @@ current,2025-03-25,Current pool,Swim,2100,2000,2000,50`;
   const oldPool = parsed.find(activity => activity.id === 'old');
   const currentPool = parsed.find(activity => activity.id === 'current');
 
-  assert.equal(oldPool?.poolLength, 20);
-  assert.equal(oldPool?.distance, 1600);
-  assert.equal(oldPool?.pacePer100m, 125);
-  assert.equal(oldPool?.poolDistanceCorrection, 'historical-20m');
-  assert.equal(oldPool?.swolf, calculateSWOLF(oldPool!.pacePer100m, oldPool!.dps || 0, 20));
+  assert.equal(oldPool?.poolLength, 25);
+  assert.equal(oldPool?.distance, 2000);
+  assert.equal(oldPool?.pacePer100m, 100);
+  assert.equal(oldPool?.swolf, undefined);
   assert.equal(currentPool?.poolLength, 50);
   assert.equal(currentPool?.distance, 2000);
   assert.equal(currentPool?.pacePer100m, 100);
-  assert.equal(currentPool?.swolf, calculateSWOLF(currentPool!.pacePer100m, currentPool!.dps || 0, 50));
+  assert.equal(currentPool?.swolf, undefined);
 });
 
 test('getWeeklyMileage groups swimming volume by week', () => {
@@ -288,42 +286,32 @@ test('getCalendarWeeklyMileage includes open-water swims on weekends', () => {
   assert.equal(weekly[0].openWaterDistanceKm, 7);
 });
 
-test('calculateOceanmanReadiness computes readiness score and projections', () => {
+test('calculateOceanmanReadiness projects a 14k pace slower than the training pace', () => {
   const testDate = new Date('2026-10-24T12:00:00Z');
-  const activities: SwimActivity[] = [
-    {
-      id: '1',
-      date: '2026-10-10',
-      title: 'Test 10k Ultra',
-      type: 'open_water',
-      distance: 10000,
-      elapsedTime: 11000,
-      movingTime: 10500, // 105s / 100m = 1:45
-      pacePer100m: 105,
-      averageCadence: 64,
-      dps: 1.85,
-      waterTemp: 19.0,
-      source: 'strava_csv',
-    },
-    {
-      id: '2',
-      date: '2026-10-15',
-      title: 'Piscina Aeróbica',
-      type: 'pool',
-      distance: 4000,
-      elapsedTime: 4200,
-      movingTime: 4000,
-      pacePer100m: 100,
-      averageCadence: 66,
-      dps: 1.8,
-      source: 'strava_csv',
-    },
-  ];
+  const activities: SwimActivity[] = [2000, 2500, 3000, 3500, 4000].map((distance, index) => ({
+    id: `ow-${index}`,
+    date: `2026-09-0${index + 1}`,
+    title: `Travesia ${index}`,
+    type: 'open_water',
+    distance,
+    movingTime: Math.round(1.25 * distance ** 1.05),
+    elapsedTime: Math.round(1.25 * distance ** 1.05 * 1.1),
+    movingRatio: 91,
+    pacePer100m: Number((1.25 * distance ** 1.05 / distance * 100).toFixed(1)),
+    avgHeartRate: 135,
+    source: 'strava_csv',
+  }));
 
   const readiness = calculateOceanmanReadiness(activities, testDate);
+  const longestPace = activities[activities.length - 1].pacePer100m;
+
   assert.ok(readiness.overallScore > 0);
   assert.ok(readiness.daysRemaining > 0);
-  assert.equal(readiness.longestSwimMeters, 10000);
+  assert.ok(
+    readiness.estimatedPacePer100mSec > longestPace,
+    'a 14k projection must be slower than the longest training swim',
+  );
+  assert.equal(readiness.longestSwimMeters, 4000);
   assert.equal(readiness.checks.length, 6);
   assert.ok(readiness.historicalEvolution.length > 0);
   assert.ok(readiness.estimatedFinishTimeSec > 0);
@@ -339,12 +327,12 @@ test('readiness has six measurable weighted checks', () => {
   assert.equal(checks.length, 6);
   assert.equal(checks.reduce((sum, check) => sum + check.weight, 0), 100);
   assert.deepEqual(checks.map(check => check.id), [
-    'check-1-pool-longest',
+    'check-1-race-projection',
     'check-2-ow-longest',
-    'check-3-volume-weekly-monthly',
-    'check-4-open-water-continuity',
-    'check-5-weekly-consistency',
-    'check-6-swolf-efficiency',
+    'check-3-weekly-volume',
+    'check-4-continuity',
+    'check-5-consistency',
+    'check-6-aerobic-efficiency',
   ]);
 });
 
@@ -359,5 +347,5 @@ test('calculateHistoricalReadiness produces chronological points with progressio
   assert.equal(points.length, 3);
   assert.ok(points[0].readinessScore <= points[2].readinessScore);
   assert.ok(points[2].longestSwimKm >= 8);
-  assert.equal(typeof points[2].checkScores?.['check-5-weekly-consistency'], 'number');
+  assert.equal(typeof points[2].checkScores?.['check-5-consistency'], 'number');
 });

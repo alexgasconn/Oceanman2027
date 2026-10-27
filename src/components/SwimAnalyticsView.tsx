@@ -1,9 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import { SwimActivity } from '../types/swim.ts';
-import { formatPace } from '../utils/swimCalculators.ts';
-import { createHistogram, getSwolfEfficiencyStats, getWeekdayHourKilometers, getWeeklyRollingMean } from '../utils/swimAnalytics.ts';
+import { formatDuration, formatPace } from '../utils/swimCalculators.ts';
+import { createHistogram, getWeekdayHourKilometers, getWeeklyRollingMean } from '../utils/swimAnalytics.ts';
+import {
+  buildRaceProjection,
+  fitFatigueModel,
+  getEfficiencyTrend,
+  getLongSwimContinuity,
+  getOpenWaterPenaltySec,
+  markPaceOutliers,
+} from '../utils/swimPerformance.ts';
 
-type ActivityFilter = 'all' | 'pool' | 'open_water';
+type ActivityFilter = 'all' | 'pool' | 'open_water' | 'unknown';
 
 const width = 640;
 const height = 270;
@@ -119,7 +127,7 @@ const DistancePaceScatter: React.FC<{ activities: SwimActivity[] }> = ({ activit
       {points.map(({ activity, distanceKm }) => {
         const x = margin.left + distanceKm / maxDistance * plotWidth;
         const y = margin.top + (paceCeiling - activity.pacePer100m) / paceRange * plotHeight;
-        const fill = activity.type === 'open_water' ? '#22d3ee' : '#60a5fa';
+        const fill = activity.type === 'open_water' ? '#22d3ee' : activity.type === 'pool' ? '#60a5fa' : '#94a3b8';
         return (
           <circle key={activity.id} cx={x} cy={y} r="5" fill={fill} fillOpacity="0.78" stroke="#07111f" strokeWidth="1.5">
             <title>{`${activity.title} · ${distanceKm.toFixed(2)} km · ${formatPace(activity.pacePer100m)}`}</title>
@@ -228,73 +236,81 @@ const TrainingHeatmap: React.FC<{ activities: SwimActivity[] }> = ({ activities 
   );
 };
 
-const SwolfEfficiencyPanel: React.FC<{ activities: SwimActivity[] }> = ({ activities }) => {
-  const stats = useMemo(() => getSwolfEfficiencyStats(activities), [activities]);
-  const monthlyTargets = [
-    { month: 'Oct 2026', phase: 'Referencia', target: 54 },
-    { month: 'Nov 2026', phase: 'Base', target: 55 },
-    { month: 'Dic 2026', phase: 'Base', target: 54 },
-    { month: 'Ene 2027', phase: 'Base', target: 54 },
-    { month: 'Feb 2027', phase: 'CSS / ritmo', target: 53 },
-    { month: 'Mar 2027', phase: 'CSS / ritmo', target: 52 },
-    { month: 'Abr 2027', phase: 'CSS / ritmo', target: 52 },
-    { month: 'May 2027', phase: 'Pico / simulacro', target: 52 },
-    { month: 'Jun 2027', phase: 'Pico / taper', target: 51 },
-  ];
-  const lengthSummary = stats.poolSummaries.length > 0
-    ? stats.poolSummaries.map(summary => `${summary.poolLength}m: ${summary.averageSwolf.toFixed(0)} (n=${summary.count})`).join(' · ')
-    : 'Sin cadencia registrada';
-  const currentEquivalent = stats.average25mEquivalent;
-  const drift = stats.longSwimDriftPct;
+const PerformancePanel: React.FC<{ activities: SwimActivity[] }> = ({ activities }) => {
+  const marked = useMemo(() => markPaceOutliers(activities), [activities]);
+  const clean = useMemo(() => marked.filter(activity => !activity.isPaceOutlier), [marked]);
+  const outlierCount = marked.length - clean.length;
+
+  const fatigue = useMemo(() => fitFatigueModel(clean), [clean]);
+  const penalty = useMemo(() => getOpenWaterPenaltySec(marked), [marked]);
+  const efficiency = useMemo(() => getEfficiencyTrend(clean), [clean]);
+  const continuity = useMemo(() => getLongSwimContinuity(marked), [marked]);
+  const projection = useMemo(
+    () => buildRaceProjection(clean, 14000),
+    [clean],
+  );
 
   return (
     <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
       <div>
-        <h3 className="text-sm font-bold text-white">Check de eficiencia · SWOLF</h3>
-        <p className="text-[11px] text-slate-500">Estimación desde moving time y cadencia media registrada, no desde conteo por largo. El equivalente a 25 m normaliza matemáticamente las piscinas de 20 m; todavía no hay muestra de 50 m.</p>
+        <h3 className="text-sm font-bold text-white">Rendimiento derivado de tus datos</h3>
+        <p className="text-[11px] text-slate-500">
+          Calculado solo con distancia, tiempos y frecuencia cardiaca, presentes en casi todas tus sesiones.
+          Los ritmos extremos se excluyen con el rango intercuartilico de cada medio.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="border-l-2 border-cyan-400 pl-3">
-          <span className="block text-[10px] uppercase text-slate-500">SWOLF estimado · 25m equivalente</span>
-          <strong className="font-mono text-xl text-cyan-300">{currentEquivalent === null ? 'N/D' : currentEquivalent.toFixed(1)}</strong>
-          <p className="text-[10px] text-slate-500">{stats.measuredSessions} sesiones medidas · {lengthSummary}</p>
+          <span className="block text-[10px] uppercase text-slate-500">Proyeccion 14 km</span>
+          <strong className="font-mono text-xl text-cyan-300">
+            {projection ? formatDuration(projection.swimTimeSec) : 'N/D'}
+          </strong>
+          <p className="text-[10px] text-slate-500">
+            {projection
+              ? `${formatPace(projection.pacePer100mSec)} · extrapola ${projection.extrapolationFactor}x tu nado mas largo`
+              : 'Faltan sesiones de 1,5 km o mas'}
+          </p>
         </div>
-        <div className="border-l-2 border-amber-400 pl-3">
-          <span className="block text-[10px] uppercase text-slate-500">Deriva en tirada larga</span>
-          <strong className="font-mono text-xl text-amber-300">{drift === null ? 'N/D' : `${drift >= 0 ? '+' : ''}${drift.toFixed(1)}%`}</strong>
-          <p className="text-[10px] text-slate-500">Máximo +5% · {drift === null ? 'faltan sesiones comparables' : `distancia &lt;2 km vs ≥2 km (n=${stats.shortSwimCount}/${stats.longSwimCount})`}</p>
+        <div className="border-l-2 border-violet-400 pl-3">
+          <span className="block text-[10px] uppercase text-slate-500">Curva de fatiga (Riegel)</span>
+          <strong className="font-mono text-xl text-violet-300">{fatigue ? `k=${fatigue.exponent}` : 'N/D'}</strong>
+          <p className="text-[10px] text-slate-500">
+            {fatigue
+              ? `R²=${fatigue.rSquared} · n=${fatigue.sampleSize}${fatigue.wasClamped ? ` · ajuste bruto ${fatigue.exponentRaw} acotado` : ''}`
+              : 'Sin muestra suficiente'}
+          </p>
         </div>
         <div className="border-l-2 border-emerald-400 pl-3">
-          <span className="block text-[10px] uppercase text-slate-500">Ritmo crucero eficiente</span>
-          <strong className="font-mono text-xl text-emerald-300">22–24 ciclos/min</strong>
-          <p className="text-[10px] text-slate-500">44–48 brazadas/min · DPS 1,8–2,1 m/ciclo a 2:10–2:20/100m</p>
+          <span className="block text-[10px] uppercase text-slate-500">Eficiencia aerobica</span>
+          <strong className="font-mono text-xl text-emerald-300">
+            {efficiency ? `${efficiency.changePct >= 0 ? '+' : ''}${efficiency.changePct}%` : 'N/D'}
+          </strong>
+          <p className="text-[10px] text-slate-500">
+            {efficiency
+              ? `${efficiency.recentAverage} vs ${efficiency.previousAverage} m/s por ppm x100`
+              : 'Se necesitan 20 sesiones con pulsometro'}
+          </p>
+        </div>
+        <div className="border-l-2 border-amber-400 pl-3">
+          <span className="block text-[10px] uppercase text-slate-500">Penalizacion aguas abiertas</span>
+          <strong className="font-mono text-xl text-amber-300">
+            {penalty === null ? 'N/D' : `+${penalty.toFixed(0)} s/100m`}
+          </strong>
+          <p className="text-[10px] text-slate-500">Diferencia medida entre tus medianas de piscina y aguas abiertas</p>
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[460px] border-collapse text-left text-xs">
-          <thead>
-            <tr className="border-b border-slate-800 text-[10px] uppercase text-slate-500">
-              <th className="py-2 pr-3 font-medium">Mes</th>
-              <th className="py-2 pr-3 font-medium">Fase</th>
-              <th className="py-2 pr-3 text-right font-medium">Objetivo 25m</th>
-              <th className="py-2 text-right font-medium">50m estimado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {monthlyTargets.map((row, index) => (
-              <tr key={row.month} className={`border-b border-slate-800/60 ${index === 0 ? 'text-cyan-200' : 'text-slate-300'}`}>
-                <td className="py-2 pr-3 font-medium">{row.month}</td>
-                <td className="py-2 pr-3 text-slate-400">{row.phase}</td>
-                <td className="py-2 pr-3 text-right font-mono tabular-nums">{index === 0 && currentEquivalent !== null ? currentEquivalent.toFixed(1) : `≤${row.target}`}</td>
-                <td className="py-2 text-right font-mono tabular-nums">{index === 0 && currentEquivalent !== null ? '—' : `≤${row.target * 2}`}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-slate-800 pt-3 text-[10px] text-slate-500">
+        <span>
+          Continuidad en nados largos:{' '}
+          <strong className="text-slate-300">{continuity ? `${continuity.medianRatio}%` : 'N/D'}</strong>
+          {continuity ? ` (n=${continuity.sampleSize})` : ''}
+        </span>
+        <span>
+          Ritmos extremos excluidos: <strong className="text-slate-300">{outlierCount}</strong> de {marked.length}
+        </span>
       </div>
-      <p className="text-[10px] text-slate-500">Los objetivos de 50 m duplican la referencia de 25 m y son provisionales, no equivalen a datos medidos. Si el SWOLF supera tu objetivo en &gt;5%: 4×50 m contando brazadas, 6×50 m de sculling/catch suave y 3×400 m a ritmo constante, manteniendo el gesto relajado y sin dolor.</p>
     </section>
   );
 };
@@ -310,16 +326,18 @@ export const SwimAnalyticsView: React.FC<SwimAnalyticsViewProps> = ({ activities
     [activities, activityFilter]
   );
   const distanceValues = useMemo(() => filteredActivities.map(activity => activity.distance / 1000), [filteredActivities]);
-  const paceValues = useMemo(() => filteredActivities.map(activity => activity.pacePer100m).filter(Number.isFinite), [filteredActivities]);
+  const paceValues = useMemo(() => filteredActivities.map(activity => activity.pacePer100m).filter(value => Number.isFinite(value) && value > 0), [filteredActivities]);
   const counts = {
     all: activities.length,
     pool: activities.filter(activity => activity.type === 'pool').length,
     open_water: activities.filter(activity => activity.type === 'open_water').length,
+    unknown: activities.filter(activity => activity.type === 'unknown').length,
   };
   const filters: { id: ActivityFilter; label: string }[] = [
     { id: 'all', label: 'Todo' },
     { id: 'pool', label: 'Piscina' },
     { id: 'open_water', label: 'Aguas abiertas' },
+    { id: 'unknown', label: 'Sin clasificar' },
   ];
 
   return (
@@ -350,6 +368,7 @@ export const SwimAnalyticsView: React.FC<SwimAnalyticsViewProps> = ({ activities
           <div className="flex justify-end gap-4 text-[10px] text-slate-400">
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-blue-400" />Piscina</span>
             <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-cyan-400" />Aguas abiertas</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-slate-400" />Sin clasificar</span>
           </div>
         </ChartPanel>
 
@@ -366,7 +385,7 @@ export const SwimAnalyticsView: React.FC<SwimAnalyticsViewProps> = ({ activities
         </ChartPanel>
       </div>
 
-      <SwolfEfficiencyPanel activities={filteredActivities} />
+      <PerformancePanel activities={filteredActivities} />
       <TrainingHeatmap activities={activities} />
     </div>
   );

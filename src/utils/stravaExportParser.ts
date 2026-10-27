@@ -8,7 +8,7 @@
  */
 import JSZip from 'jszip';
 import { SwimActivity } from '../types/swim.ts';
-import { calculateDPS, calculateStrokeIndex, calculateSWOLF, parseStravaCsv } from './swimCalculators.ts';
+import { parseStravaCsv } from './swimCalculators.ts';
 
 // Haversine formula to calculate distance between two GPS coordinates in meters
 function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -33,7 +33,7 @@ export function parseGpxString(gpxText: string, filename: string = 'swim.gpx'): 
   try {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(gpxText, 'text/xml');
-    
+
     // Check if valid XML
     const parserError = xmlDoc.getElementsByTagName('parsererror');
     if (parserError.length > 0) return null;
@@ -99,40 +99,34 @@ export function parseGpxString(gpxText: string, filename: string = 'swim.gpx'): 
 
     if (totalDistMeters < 100) return null;
 
-    const movingTime = firstTime && lastTime
-      ? Math.max(60, Math.round((lastTime.getTime() - firstTime.getTime()) / 1000))
-      : Math.round((totalDistMeters / 100) * 100);
-
-    const pacePer100m = (movingTime / totalDistMeters) * 100;
-    const avgCadence = cadCount > 0 ? Math.round(cadSum / cadCount) : 63;
+    const elapsedTime = firstTime && lastTime
+      ? Math.max(0, Math.round((lastTime.getTime() - firstTime.getTime()) / 1000))
+      : 0;
+    const avgCadence = cadCount > 0 ? Math.round(cadSum / cadCount) : undefined;
     const avgHr = hrCount > 0 ? Math.round(hrSum / hrCount) : undefined;
-    const speedMps = totalDistMeters / movingTime;
-    const dps = calculateDPS(speedMps, avgCadence);
-    const swolf = calculateSWOLF(pacePer100m, dps, 50);
 
     // Title from <name> tag or filename
     const nameEl = xmlDoc.getElementsByTagName('name')[0];
     const title = (nameEl && nameEl.textContent) ? nameEl.textContent.trim() : filename.replace(/\.gpx$/i, '');
-    const dateStr = firstTime ? firstTime.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const dateStr = firstTime
+      ? `${firstTime.getFullYear()}-${String(firstTime.getMonth() + 1).padStart(2, '0')}-${String(firstTime.getDate()).padStart(2, '0')}`
+      : '';
 
     return {
       id: `gpx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       date: dateStr,
+      startedAt: firstTime?.toISOString(),
       title: title || 'Travesía GPS Aguas Abiertas',
-      type: 'open_water',
+      type: 'unknown',
       distance: Math.round(totalDistMeters),
-      elapsedTime: Math.round(movingTime * 1.06),
-      movingTime,
-      pacePer100m: Number(pacePer100m.toFixed(1)),
+      elapsedTime,
+      movingTime: 0,
+      hasRecordedElapsedTime: elapsedTime > 0,
+      hasRecordedMovingTime: false,
+      pacePer100m: 0,
       averageCadence: avgCadence,
-      totalStrokes: Math.round((movingTime / 60) * avgCadence),
-      dps,
-      swolf,
-      strokeIndex: calculateStrokeIndex(speedMps, dps),
+      hasRecordedCadence: cadCount > 0,
       avgHeartRate: avgHr,
-      calories: Math.round((totalDistMeters / 100) * 31),
-      waterTemp: 19.5,
-      hasWetsuit: true,
       source: 'gpx',
     };
   } catch (err) {
@@ -148,7 +142,7 @@ export function parseTcxString(tcxText: string, filename: string = 'swim.tcx'): 
   try {
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(tcxText, 'text/xml');
-    
+
     const parserError = xmlDoc.getElementsByTagName('parsererror');
     if (parserError.length > 0) return null;
 
@@ -201,32 +195,30 @@ export function parseTcxString(tcxText: string, filename: string = 'swim.tcx'): 
 
     if (totalDist < 100) return null;
 
-    const movingTime = firstTime && lastTime
-      ? Math.max(60, Math.round((lastTime.getTime() - firstTime.getTime()) / 1000))
-      : Math.round((totalDist / 100) * 100);
+    const elapsedTime = firstTime && lastTime
+      ? Math.max(0, Math.round((lastTime.getTime() - firstTime.getTime()) / 1000))
+      : 0;
+    const avgCadence = cadCount > 0 ? Math.round(cadSum / cadCount) : undefined;
 
-    const pacePer100m = (movingTime / totalDist) * 100;
-    const avgCadence = cadCount > 0 ? Math.round(cadSum / cadCount) : 64;
-    const speedMps = totalDist / movingTime;
-    const dps = calculateDPS(speedMps, avgCadence);
-
-    const dateStr = firstTime ? firstTime.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const dateStr = firstTime
+      ? `${firstTime.getFullYear()}-${String(firstTime.getMonth() + 1).padStart(2, '0')}-${String(firstTime.getDate()).padStart(2, '0')}`
+      : '';
     const title = filename.replace(/\.tcx$/i, '') || 'Entrenamiento Natación Garmin';
 
     return {
       id: `tcx-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       date: dateStr,
+      startedAt: firstTime?.toISOString(),
       title,
-      type: 'open_water',
+      type: 'unknown',
       distance: Math.round(totalDist),
-      elapsedTime: Math.round(movingTime * 1.05),
-      movingTime,
-      pacePer100m: Number(pacePer100m.toFixed(1)),
+      elapsedTime,
+      movingTime: 0,
+      hasRecordedElapsedTime: elapsedTime > 0,
+      hasRecordedMovingTime: false,
+      pacePer100m: 0,
       averageCadence: avgCadence,
-      totalStrokes: Math.round((movingTime / 60) * avgCadence),
-      dps,
-      swolf: calculateSWOLF(pacePer100m, dps, 50),
-      strokeIndex: calculateStrokeIndex(speedMps, dps),
+      hasRecordedCadence: cadCount > 0,
       avgHeartRate: hrCount > 0 ? Math.round(hrSum / hrCount) : undefined,
       source: 'tcx',
     };

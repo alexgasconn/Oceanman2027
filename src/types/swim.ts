@@ -2,7 +2,7 @@
  * Types for Oceanman swim readiness and telemetry.
  */
 
-export type SwimActivityType = 'pool' | 'open_water';
+export type SwimActivityType = 'pool' | 'open_water' | 'unknown';
 
 export interface SwimSplit {
   km: number;
@@ -10,6 +10,7 @@ export interface SwimSplit {
   cadenceSpm?: number;
   heartRate?: number;
   swolf?: number;
+  strokesPerLength?: number;
 }
 
 export interface SwimActivity {
@@ -21,6 +22,8 @@ export interface SwimActivity {
   distance: number; // in meters
   elapsedTime: number; // in seconds
   movingTime: number; // in seconds
+  hasRecordedMovingTime?: boolean;
+  hasRecordedElapsedTime?: boolean;
   movingRatio?: number; // (movingTime / elapsedTime) * 100
   elevationHigh?: number; // meters from Strava (non-zero indicates open water)
   elevationLow?: number; // meters from Strava
@@ -28,18 +31,30 @@ export interface SwimActivity {
   hasPoolLength?: boolean; // Strava recorded a pool length (pool swims only)
   openWaterTrigger?: string;
   pacePer100m: number; // in seconds per 100m strictly using movingTime
-  averageCadence?: number; // SPM (Strokes / minute)
+  averageCadence?: number; // Exported cadence value; source CSV does not specify its unit
   hasRecordedCadence?: boolean;
   totalStrokes?: number;
+  hasRecordedTotalStrokes?: boolean;
+  totalCycles?: number;
   swolf?: number;
+  hasRecordedSwolf?: boolean;
+  strokesPerLength?: number;
+  hasRecordedSpl?: boolean;
+  hasRecordedDps?: boolean;
   dps?: number; // Distance per stroke cycle in meters
   strokeIndex?: number; // Speed * DPS (m²/s)
   avgHeartRate?: number;
   maxHeartRate?: number;
+  relativeEffort?: number;
   calories?: number;
+  hasRecordedCalories?: boolean;
+  /** Speed (m/s) per heartbeat x100; aerobic efficiency, only when HR exists. */
+  efficiencyFactor?: number;
+  isPaceOutlier?: boolean;
   poolLength?: number | null;
   poolDistanceCorrection?: 'historical-20m';
   waterTemp?: number; // °C
+  hasRecordedWaterTemp?: boolean;
   hasWetsuit?: boolean;
   notes?: string;
   source: 'strava_zip' | 'strava_csv' | 'garmin_fit' | 'gpx' | 'tcx';
@@ -95,6 +110,8 @@ export interface ReadinessCheckItem {
   targetValueFormatted: string;
   unit: string;
   status: 'passed' | 'warning' | 'pending';
+  isDataAvailable?: boolean;
+  isScored?: boolean;
   score: number; // 0 - 100
   weight: number; // % contribution to overall score
   details: string;

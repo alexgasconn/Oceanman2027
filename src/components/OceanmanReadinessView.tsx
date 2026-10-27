@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { OceanmanReadiness, SwimActivity, ReadinessCheckItem } from '../types/swim.ts';
 import { formatDistance, formatPace, ORTA_HISTORICAL_CONDITIONS } from '../utils/swimCalculators.ts';
+import { buildReadinessTimeline, ReadinessGranularity } from '../utils/readinessTimeline.ts';
 import { HistoricalReadinessView } from './HistoricalReadinessView.tsx';
 
 interface OceanmanReadinessViewProps {
@@ -32,6 +33,12 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
   onOpenCalculator,
 }) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'passed' | 'warning' | 'pending'>('all');
+  const [granularity, setGranularity] = useState<ReadinessGranularity>('weekly');
+
+  const timeline = useMemo(
+    () => buildReadinessTimeline(activities, granularity),
+    [activities, granularity],
+  );
 
   // Filter the readiness checks
   const filteredChecks = useMemo(() => {
@@ -56,9 +63,10 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
   }, [owSwims]);
 
   const avgMovingRatio = useMemo(() => {
-    if (activities.length === 0) return 0;
-    const sum = activities.reduce((acc, a) => acc + (a.movingRatio || 90), 0);
-    return Number((sum / activities.length).toFixed(1));
+    const recordedRatios = activities.map(activity => activity.movingRatio).filter((value): value is number => value !== undefined);
+    if (recordedRatios.length === 0) return null;
+    const sum = recordedRatios.reduce((acc, ratio) => acc + ratio, 0);
+    return Number((sum / recordedRatios.length).toFixed(1));
   }, [activities]);
 
   const getEnvIcon = (category: string) => {
@@ -105,9 +113,9 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-extrabold font-mono text-blue-300 tabular-nums">
-              {longestPool ? formatDistance(longestPool.distance) : '0 m'}
+              {longestPool ? formatDistance(longestPool.distance) : 'N/D'}
             </span>
-            <span className="text-[11px] text-slate-500">/ 10k meta</span>
+            <span className="text-[11px] text-slate-500">referencia en piscina</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400 truncate">
             {longestPool ? `${longestPool.date} (${formatPace(longestPool.pacePer100m)})` : 'Sin sesiones piscina'}
@@ -122,9 +130,9 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-extrabold font-mono text-cyan-300 tabular-nums">
-              {longestOw ? formatDistance(longestOw.distance) : '0 m'}
+              {longestOw ? formatDistance(longestOw.distance) : 'N/D'}
             </span>
-            <span className="text-[11px] text-slate-500">/ 12k meta</span>
+            <span className="text-[11px] text-slate-500">/ 14 km de carrera</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400 truncate">
             {longestOw ? `${longestOw.date} (${formatPace(longestOw.pacePer100m)})` : 'Sin travesías registradas'}
@@ -144,7 +152,7 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
             <span className="text-[11px] text-slate-500">/ sem</span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">
-            Hito objetivo: 25 km/sem
+            Hito objetivo: 20 km/sem
           </p>
         </div>
 
@@ -156,7 +164,7 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-2xl font-extrabold font-mono text-amber-300 tabular-nums">
-              {avgMovingRatio > 0 ? `${avgMovingRatio}%` : 'N/D'}
+              {avgMovingRatio === null ? 'N/D' : `${avgMovingRatio}%`}
             </span>
             <span className="text-[11px] text-emerald-400 font-semibold">Continuidad</span>
           </div>
@@ -164,6 +172,69 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
             Tiempo nado vs tiempo total
           </p>
         </div>
+      </div>
+
+      {/* Readiness percentage resampled over time */}
+      <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-white">Evolución del % de preparación</h3>
+            <p className="text-[11px] text-slate-500">
+              Recalculado al cierre de cada periodo usando solo las sesiones disponibles hasta esa fecha.
+            </p>
+          </div>
+          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs">
+            {([
+              ['daily', 'Diario'],
+              ['weekly', 'Semanal'],
+              ['monthly', 'Mensual'],
+            ] as [ReadinessGranularity, string][]).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={granularity === id}
+                onClick={() => setGranularity(id)}
+                className={`cursor-pointer rounded px-3 py-1 font-semibold transition-colors ${granularity === id ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {timeline.length === 0 ? (
+          <p className="py-6 text-center text-xs text-slate-500">Sin sesiones suficientes para construir la serie.</p>
+        ) : (
+          <>
+            <div className="flex items-end gap-1 overflow-x-auto pb-2" role="img" aria-label="Evolución del porcentaje de preparación">
+              {timeline.map(point => (
+                <div key={point.periodKey} className="flex min-w-[26px] flex-1 flex-col items-center gap-1">
+                  <span className="font-mono text-[9px] text-slate-400">{point.readinessPct}</span>
+                  <div
+                    className="w-full rounded-t bg-cyan-500/70"
+                    style={{ height: `${Math.max(2, point.readinessPct * 1.1)}px` }}
+                    title={`${point.label}: ${point.readinessPct}% · ${point.sessionsToDate} sesiones acumuladas`}
+                  />
+                  <span className="truncate text-[8px] text-slate-500">{point.label}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-6 text-[11px] text-slate-400">
+              <span>
+                Último periodo:{' '}
+                <strong className="text-white">{timeline[timeline.length - 1].readinessPct}%</strong>
+              </span>
+              <span>
+                Variación vs periodo previo:{' '}
+                <strong className="text-white">
+                  {timeline.length > 1
+                    ? `${timeline[timeline.length - 1].readinessPct - timeline[timeline.length - 2].readinessPct >= 0 ? '+' : ''}${timeline[timeline.length - 1].readinessPct - timeline[timeline.length - 2].readinessPct} pts`
+                    : 'N/D'}
+                </strong>
+              </span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Readiness checks */}
@@ -244,7 +315,7 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                     </span>
                     <div className="min-w-0">
                       <h4 className="truncate text-sm font-semibold text-white">{check.shortTitle || check.title}</h4>
-                      <span className="text-[10px] text-slate-500">{check.weight}% del índice</span>
+                      <span className="text-[10px] text-slate-500">{check.isScored === false ? 'Informativo · fuera del índice' : check.isDataAvailable === false ? 'Sin datos para puntuar' : `${check.weight}% del índice`}</span>
                     </div>
                   </div>
 
@@ -255,7 +326,7 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
                         ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300'
                         : 'bg-slate-800/80 border border-slate-700 text-slate-300'
                       }`}>
-                      {isPassed ? 'Superado' : isWarning ? 'En progreso' : 'Pendiente'}
+                      {check.isScored === false ? 'Informativo' : check.isDataAvailable === false ? 'Sin datos' : isPassed ? 'Superado' : isWarning ? 'En progreso' : 'Pendiente'}
                     </span>
                     <span className="font-mono text-xs font-bold tabular-nums text-slate-200">{check.currentValueFormatted}</span>
                   </div>

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Waves, Calendar, Clock, Droplet, Shield, RotateCcw } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, ChevronDown, ChevronRight, ChevronUp, Waves, Calendar, Clock, Shield, RotateCcw } from 'lucide-react';
 import { SwimActivity } from '../types/swim.ts';
 import { formatDistance, formatDuration, formatPace } from '../utils/swimCalculators.ts';
 
@@ -9,7 +9,7 @@ interface ActivitiesListViewProps {
   onOpenImport: () => void;
 }
 
-type SortField = 'date' | 'title' | 'type' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'cadence' | 'dps' | 'swolf';
+type SortField = 'date' | 'title' | 'type' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'cadence' | 'dps' | 'swolf' | 'spl';
 
 export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   activities,
@@ -17,9 +17,8 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   onOpenImport,
 }) => {
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'open_water' | 'pool'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'open_water' | 'pool' | 'unknown'>('all');
   const [distRange, setDistRange] = useState<'all' | 'under_3k' | '3k_6k' | '6k_10k' | 'over_10k'>('all');
-  const [tempFilter, setTempFilter] = useState<'all' | 'cold' | 'mild' | 'warm'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'last_30d' | 'last_90d' | 'this_year'>('all');
   const [sortBy, setSortBy] = useState<SortField>('date');
   const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc');
@@ -29,11 +28,10 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
     setSearch('');
     setFilterType('all');
     setDistRange('all');
-    setTempFilter('all');
     setDateFilter('all');
   };
 
-  const hasActiveFilters = search !== '' || filterType !== 'all' || distRange !== 'all' || tempFilter !== 'all' || dateFilter !== 'all';
+  const hasActiveFilters = search !== '' || filterType !== 'all' || distRange !== 'all' || dateFilter !== 'all';
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -64,7 +62,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   );
 
   const filteredAndSorted = useMemo(() => {
-    const now = new Date('2026-10-24T12:00:00Z').getTime();
+    const now = Date.now();
 
     return activities
       .filter((a) => {
@@ -86,18 +84,12 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
         if (distRange === '6k_10k' && (a.distance < 6000 || a.distance >= 10000)) return false;
         if (distRange === 'over_10k' && a.distance < 10000) return false;
 
-        // Temperature filter
-        const temp = a.waterTemp || (a.type === 'pool' ? 27 : 20);
-        if (tempFilter === 'cold' && temp > 20) return false;
-        if (tempFilter === 'mild' && (temp <= 20 || temp > 24)) return false;
-        if (tempFilter === 'warm' && temp <= 24) return false;
-
         // Date window filter
         if (dateFilter !== 'all') {
           const actTime = new Date(a.date).getTime();
           if (dateFilter === 'last_30d' && actTime < now - 30 * 24 * 3600 * 1000) return false;
           if (dateFilter === 'last_90d' && actTime < now - 90 * 24 * 3600 * 1000) return false;
-          if (dateFilter === 'this_year' && !a.date.startsWith('2026')) return false;
+          if (dateFilter === 'this_year' && !a.date.startsWith(String(new Date().getFullYear()))) return false;
         }
 
         return true;
@@ -110,11 +102,12 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
             case 'type': return activity.type;
             case 'distance': return activity.distance;
             case 'movingTime': return activity.movingTime;
-            case 'movingRatio': return activity.movingRatio ?? (activity.elapsedTime > 0 ? activity.movingTime / activity.elapsedTime * 100 : 100);
+            case 'movingRatio': return activity.movingRatio;
             case 'pace': return activity.pacePer100m;
             case 'cadence': return activity.averageCadence;
             case 'dps': return activity.dps;
             case 'swolf': return activity.swolf;
+            case 'spl': return activity.strokesPerLength;
           }
         };
         const first = getValue(a);
@@ -126,7 +119,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
           : Number(first) - Number(second);
         return sortOrder === 'asc' ? diff : -diff;
       });
-  }, [activities, search, filterType, distRange, tempFilter, dateFilter, sortBy, sortOrder]);
+  }, [activities, search, filterType, distRange, dateFilter, sortBy, sortOrder]);
 
   return (
     <div className="space-y-6">
@@ -169,13 +162,19 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
               >
                 Piscina
               </button>
+              <button
+                onClick={() => setFilterType('unknown')}
+                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${filterType === 'unknown' ? 'bg-slate-700 text-slate-200' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                Sin clasificar ({activities.filter(activity => activity.type === 'unknown').length})
+              </button>
             </div>
 
             <button
               onClick={() => setShowAdvancedFilters(prev => !prev)}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${showAdvancedFilters || hasActiveFilters
-                  ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/50'
-                  : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                ? 'bg-cyan-950/40 text-cyan-300 border-cyan-500/50'
+                : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                 }`}
             >
               <Filter className="w-3.5 h-3.5" />
@@ -204,21 +203,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                 <option value="3k_6k">3.000m – 6.000m (volumen medio)</option>
                 <option value="6k_10k">6.000m – 10.000m (fondo largo)</option>
                 <option value="over_10k">≥ 10.000m (test ultra)</option>
-              </select>
-            </div>
-
-            {/* Filter: Water Temperature */}
-            <div>
-              <span className="text-slate-400 font-semibold block mb-1.5">Temperatura del Agua:</span>
-              <select
-                value={tempFilter}
-                onChange={(e) => setTempFilter(e.target.value as any)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-cyan-500"
-              >
-                <option value="all">Todas las temperaturas</option>
-                <option value="cold">Fría (≤ 20°C · Símil Lago d'Orta)</option>
-                <option value="mild">Templada (21°C – 24°C)</option>
-                <option value="warm">Cálida / Piscina (&gt; 24°C)</option>
               </select>
             </div>
 
@@ -264,16 +248,17 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                 {renderSortHeader('Tiempo nado', 'movingTime', 'text-right')}
                 {renderSortHeader('Moving Ratio', 'movingRatio', 'text-right')}
                 {renderSortHeader('Ritmo /100m', 'pace', 'text-right')}
-                {renderSortHeader('Cadencia', 'cadence', 'text-right')}
+                {renderSortHeader('Cadencia (export)', 'cadence', 'text-right')}
                 {renderSortHeader('DPS', 'dps', 'text-right')}
                 {renderSortHeader('SWOLF', 'swolf', 'text-right')}
+                {renderSortHeader('SPL', 'spl', 'text-right')}
                 <th className="py-3.5 px-4 text-center">Detalle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums text-slate-300">
               {filteredAndSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-slate-500 font-sans">
+                  <td colSpan={12} className="py-12 text-center text-slate-500 font-sans">
                     No se encontraron sesiones con los filtros seleccionados.{' '}
                     <button
                       onClick={resetFilters}
@@ -285,7 +270,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                 </tr>
               ) : (
                 filteredAndSorted.map((act) => {
-                  const ratio = act.movingRatio || (act.elapsedTime > 0 ? Math.round((act.movingTime / act.elapsedTime) * 100) : 100);
+                  const ratio = act.movingRatio;
 
                   return (
                     <tr
@@ -299,50 +284,48 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                       <td className="py-3 px-4 font-sans font-semibold text-white group-hover:text-cyan-300 transition-colors">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="truncate max-w-xs">{act.title}</span>
-                          {act.waterTemp && act.waterTemp <= 20 && (
-                            <span className="text-[10px] text-blue-300 font-mono bg-blue-950/60 border border-blue-800/40 px-1.5 py-0.5 rounded shrink-0" title={`Agua fresca: ${act.waterTemp}°C`}>
-                              ❄ {act.waterTemp}°C
-                            </span>
-                          )}
                         </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center rounded px-2 py-1 font-sans text-[10px] font-semibold ${act.type === 'open_water' ? 'bg-cyan-950/70 text-cyan-300' : 'bg-blue-950/70 text-blue-300'}`}>
-                          {act.type === 'open_water' ? 'Aguas abiertas' : 'Piscina'}
+                        <span className={`inline-flex items-center rounded px-2 py-1 font-sans text-[10px] font-semibold ${act.type === 'open_water' ? 'bg-cyan-950/70 text-cyan-300' : act.type === 'pool' ? 'bg-blue-950/70 text-blue-300' : 'bg-slate-800 text-slate-300'}`}>
+                          {act.type === 'open_water' ? 'Aguas abiertas' : act.type === 'pool' ? 'Piscina' : 'Sin clasificar'}
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-white whitespace-nowrap">
                         {formatDistance(act.distance)}
                       </td>
                       <td className="py-3 px-4 text-right text-slate-300 whitespace-nowrap">
-                        <div>{formatDuration(act.movingTime)}</div>
-                        {act.elapsedTime > act.movingTime && (
+                        <div>{act.movingTime > 0 ? formatDuration(act.movingTime) : 'N/D'}</div>
+                        {act.movingTime > 0 && act.elapsedTime > act.movingTime && (
                           <div className="text-[10px] text-slate-500 font-sans" title={`Pausa total: ${formatDuration(act.elapsedTime - act.movingTime)}`}>
                             Elapsed: {formatDuration(act.elapsedTime)}
                           </div>
                         )}
                       </td>
                       <td className="py-3 px-4 text-right whitespace-nowrap">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${ratio >= 90
-                            ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800/40'
-                            : ratio >= 80
-                              ? 'text-cyan-400 bg-cyan-950/60 border border-cyan-800/40'
-                              : 'text-amber-400 bg-amber-950/60 border border-amber-800/40'
-                          }`} title={`Continuidad: ${ratio}% en movimiento (Pausa: ${formatDuration(act.elapsedTime - act.movingTime)})`}>
+                        {ratio !== undefined ? <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-bold ${ratio >= 90
+                          ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-800/40'
+                          : ratio >= 80
+                            ? 'text-cyan-400 bg-cyan-950/60 border border-cyan-800/40'
+                            : 'text-amber-400 bg-amber-950/60 border border-amber-800/40'
+                          }`} title={`Continuidad: ${ratio}% en movimiento`}>
                           {ratio}%
-                        </span>
+                        </span> : <span className="text-slate-500">N/D</span>}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-cyan-400 whitespace-nowrap">
                         {formatPace(act.pacePer100m)}
                       </td>
                       <td className="py-3 px-4 text-right text-amber-400 whitespace-nowrap">
-                        {act.averageCadence || '--'} <span className="text-[10px] text-slate-500 font-sans">SPM</span>
+                        {act.hasRecordedCadence && act.averageCadence !== undefined ? act.averageCadence : 'N/D'}
                       </td>
                       <td className="py-3 px-4 text-right text-blue-300 whitespace-nowrap">
-                        {act.dps ? `${act.dps}m` : '--'}
+                        {act.hasRecordedDps && act.dps !== undefined ? `${act.dps}m` : 'N/D'}
                       </td>
                       <td className="py-3 px-4 text-right text-violet-300 whitespace-nowrap">
-                        {act.swolf || '--'}
+                        {act.hasRecordedSwolf && act.swolf !== undefined ? act.swolf : 'N/D'}
+                      </td>
+                      <td className="py-3 px-4 text-right text-violet-300 whitespace-nowrap">
+                        {act.hasRecordedSpl && act.strokesPerLength !== undefined ? act.strokesPerLength : 'N/D'}
                       </td>
                       <td className="py-3 px-4 text-center">
                         <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors inline-block" />

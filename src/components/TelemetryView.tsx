@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { 
-  Activity, 
-  BarChart2, 
-  ListFilter, 
-  Waves, 
-  Timer, 
-  Sparkles, 
+import {
+  Activity,
+  BarChart2,
+  ListFilter,
+  Waves,
+  Timer,
+  Sparkles,
   Compass,
   Zap,
   TrendingUp
@@ -35,34 +35,29 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
       return {
         totalKm: 0,
         openWaterCount: 0,
-        avgMovingRatio: 0,
-        avgPaceSec: 0,
-        avgDps: 0,
-        avgSwolf: 0,
+        avgMovingRatio: null,
+        avgPaceSec: null,
+        swolfCount: 0,
+        splCount: 0,
       };
     }
 
     const totalDist = activities.reduce((sum, a) => sum + a.distance, 0);
-    const totalMoving = activities.reduce((sum, a) => sum + a.movingTime, 0);
-    const totalElapsed = activities.reduce((sum, a) => sum + a.elapsedTime, 0);
-    const owSessions = activities.filter(a => a.type === 'open_water' || a.isOpenWaterDetected);
-    
-    const validDps = activities.filter(a => (a.dps || 0) > 0);
-    const avgDps = validDps.length > 0 ? validDps.reduce((s, a) => s + a.dps!, 0) / validDps.length : 0;
-
-    const validSwolf = activities.filter(a => (a.swolf || 0) > 0);
-    const avgSwolf = validSwolf.length > 0 ? Math.round(validSwolf.reduce((s, a) => s + a.swolf!, 0) / validSwolf.length) : 0;
-
-    const avgMovingRatio = totalElapsed > 0 ? Math.round((totalMoving / totalElapsed) * 100) : 100;
-    const avgPaceSec = totalDist > 0 ? (totalMoving / totalDist) * 100 : 0;
+    const owSessions = activities.filter(a => a.type === 'open_water');
+    const ratios = activities.map(activity => activity.movingRatio).filter((value): value is number => value !== undefined);
+    const paceSessions = activities.filter(activity => activity.distance > 0 && activity.movingTime > 0);
+    const paceDistance = paceSessions.reduce((sum, activity) => sum + activity.distance, 0);
+    const paceTime = paceSessions.reduce((sum, activity) => sum + activity.movingTime, 0);
+    const swolfCount = activities.filter(activity => activity.hasRecordedSwolf && activity.swolf !== undefined).length;
+    const splCount = activities.filter(activity => activity.hasRecordedSpl && activity.strokesPerLength !== undefined).length;
 
     return {
       totalKm: Number((totalDist / 1000).toFixed(1)),
       openWaterCount: owSessions.length,
-      avgMovingRatio,
-      avgPaceSec: Math.round(avgPaceSec),
-      avgDps: Number(avgDps.toFixed(2)),
-      avgSwolf,
+      avgMovingRatio: ratios.length ? Math.round(ratios.reduce((sum, value) => sum + value, 0) / ratios.length) : null,
+      avgPaceSec: paceDistance > 0 ? Math.round(paceTime / paceDistance * 100) : null,
+      swolfCount,
+      splCount,
     };
   }, [activities]);
 
@@ -87,33 +82,30 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
           <div className="flex items-center gap-1.5 p-1 bg-slate-950 border border-slate-800 rounded-xl text-xs shrink-0">
             <button
               onClick={() => setSubTab('sessions')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                subTab === 'sessions'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${subTab === 'sessions'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <ListFilter className="w-3.5 h-3.5" />
               <span>Sesiones ({activities.length})</span>
             </button>
             <button
               onClick={() => setSubTab('analysis')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                subTab === 'analysis'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${subTab === 'analysis'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <BarChart2 className="w-3.5 h-3.5" />
               <span>Distribución</span>
             </button>
             <button
               onClick={() => setSubTab('charts')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${
-                subTab === 'charts'
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-colors cursor-pointer ${subTab === 'charts'
                   ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
                   : 'text-slate-400 hover:text-slate-200'
-              }`}
+                }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
               <span>Evolución</span>
@@ -128,13 +120,13 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
             <span className="text-base font-mono font-bold text-cyan-400 tabular-nums">
               {metrics.openWaterCount} <span className="text-xs font-sans text-slate-400">sesiones</span>
             </span>
-            <span className="text-[10px] text-slate-500 block">Detectadas por palabras clave</span>
+            <span className="text-[10px] text-slate-500 block">Clasificación con evidencia GPS</span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Moving Ratio Promedio</span>
             <span className="text-base font-mono font-bold text-emerald-400 tabular-nums">
-              {metrics.avgMovingRatio}%
+              {metrics.avgMovingRatio === null ? 'N/D' : `${metrics.avgMovingRatio}%`}
             </span>
             <span className="text-[10px] text-slate-500 block">Continuidad de nado</span>
           </div>
@@ -142,17 +134,17 @@ export const TelemetryView: React.FC<TelemetryViewProps> = ({
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
             <span className="text-[10px] uppercase font-bold text-slate-400 block">Ritmo Base Medio</span>
             <span className="text-base font-mono font-bold text-white tabular-nums">
-              {formatPace(metrics.avgPaceSec)}
+              {metrics.avgPaceSec === null ? 'N/D' : formatPace(metrics.avgPaceSec)}
             </span>
             <span className="text-[10px] text-slate-500 block">Basado en moving time</span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block">Deslizamiento DPS</span>
+            <span className="text-[10px] uppercase font-bold text-slate-400 block">SWOLF / SPL</span>
             <span className="text-base font-mono font-bold text-blue-400 tabular-nums">
-              {metrics.avgDps} <span className="text-xs font-sans text-slate-400">m/ciclo</span>
+              N/D
             </span>
-            <span className="text-[10px] text-slate-500 block">SWOLF prom: {metrics.avgSwolf}</span>
+            <span className="text-[10px] text-slate-500 block">{metrics.swolfCount} SWOLF · {metrics.splCount} SPL directos</span>
           </div>
         </div>
       </div>
