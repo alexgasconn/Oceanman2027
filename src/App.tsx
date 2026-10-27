@@ -92,7 +92,10 @@ export default function App() {
             if (!source || (
               activity.hasPoolLength === source.hasPoolLength &&
               activity.elevationHigh === source.elevationHigh &&
-              activity.elevationLow === source.elevationLow
+              activity.elevationLow === source.elevationLow &&
+              activity.startedAt === source.startedAt &&
+              activity.hasRecordedCadence === source.hasRecordedCadence &&
+              activity.averageCadence === source.averageCadence
             )) return activity;
             changed = true;
             return recalculateSwimMetrics({
@@ -100,6 +103,9 @@ export default function App() {
               elevationHigh: source.elevationHigh,
               elevationLow: source.elevationLow,
               hasPoolLength: source.hasPoolLength,
+              startedAt: source.startedAt,
+              averageCadence: source.hasRecordedCadence ? source.averageCadence : activity.averageCadence,
+              hasRecordedCadence: source.hasRecordedCadence || activity.hasRecordedCadence,
             });
           });
           return changed ? migrated : current;

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { SwimActivity } from '../types/swim.ts';
 import { formatPace } from '../utils/swimCalculators.ts';
-import { createHistogram, getWeeklyRollingMean } from '../utils/swimAnalytics.ts';
+import { createHistogram, getSwolfEfficiencyStats, getWeekdayHourKilometers, getWeeklyRollingMean } from '../utils/swimAnalytics.ts';
 
 type ActivityFilter = 'all' | 'pool' | 'open_water';
 
@@ -175,6 +175,130 @@ const WeeklyRollingMean: React.FC<{ activities: SwimActivity[] }> = ({ activitie
   );
 };
 
+const WEEKDAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+
+const TrainingHeatmap: React.FC<{ activities: SwimActivity[] }> = ({ activities }) => {
+  const totals = useMemo(() => getWeekdayHourKilometers(activities), [activities]);
+  const maxKm = Math.max(0, ...totals.flat());
+
+  return (
+    <ChartPanel title="Cuándo nadas" detail="Km acumulados por día y hora local · pasa el cursor para ver el valor exacto">
+      {maxKm === 0 ? (
+        <EmptyChart />
+      ) : (
+        <div className="overflow-x-auto pb-2">
+          <div className="min-w-[850px]" role="grid" aria-label="Kilómetros de natación por día de la semana y hora">
+            <div className="grid items-center gap-1" style={{ gridTemplateColumns: '48px repeat(24, minmax(28px, 1fr))' }} role="row">
+              <span />
+              {Array.from({ length: 24 }, (_, hour) => (
+                <span key={hour} className="text-center text-[9px] tabular-nums text-slate-500" role="columnheader">
+                  {hour % 2 === 0 ? String(hour).padStart(2, '0') : ''}
+                </span>
+              ))}
+            </div>
+            {totals.map((day, weekday) => (
+              <div key={WEEKDAYS[weekday]} className="mt-1 grid items-center gap-1" style={{ gridTemplateColumns: '48px repeat(24, minmax(28px, 1fr))' }} role="row">
+                <span className="text-[10px] font-medium text-slate-400" role="rowheader">{WEEKDAYS[weekday]}</span>
+                {day.map((km, hour) => {
+                  const opacity = km > 0 ? 0.16 + km / maxKm * 0.72 : 0;
+                  return (
+                    <div
+                      key={hour}
+                      className="flex h-7 items-center justify-center rounded-sm border border-slate-800/80 font-mono text-[8px] tabular-nums"
+                      style={km > 0 ? { backgroundColor: `rgba(34, 211, 238, ${opacity})`, color: opacity > 0.5 ? '#ecfeff' : '#a5f3fc' } : undefined}
+                      title={`${WEEKDAYS[weekday]} ${String(hour).padStart(2, '0')}:00 · ${km.toFixed(2)} km`}
+                      role="gridcell"
+                      aria-label={`${WEEKDAYS[weekday]} ${hour}:00, ${km.toFixed(2)} km`}
+                    >
+                      {km > 0 ? km.toFixed(1) : ''}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <div className="mt-3 flex items-center justify-between text-[10px] text-slate-500">
+        <span>Menos km</span>
+        <span className="h-2 w-24 rounded-sm bg-gradient-to-r from-cyan-950 to-cyan-300" />
+        <span>Más km</span>
+      </div>
+    </ChartPanel>
+  );
+};
+
+const SwolfEfficiencyPanel: React.FC<{ activities: SwimActivity[] }> = ({ activities }) => {
+  const stats = useMemo(() => getSwolfEfficiencyStats(activities), [activities]);
+  const monthlyTargets = [
+    { month: 'Oct 2026', phase: 'Referencia', target: 54 },
+    { month: 'Nov 2026', phase: 'Base', target: 54 },
+    { month: 'Dic 2026', phase: 'Base', target: 53 },
+    { month: 'Ene 2027', phase: 'Base', target: 53 },
+    { month: 'Feb 2027', phase: 'CSS / ritmo', target: 52 },
+    { month: 'Mar 2027', phase: 'CSS / ritmo', target: 52 },
+    { month: 'Abr 2027', phase: 'CSS / ritmo', target: 52 },
+    { month: 'May 2027', phase: 'Pico / simulacro', target: 51 },
+    { month: 'Jun 2027', phase: 'Pico / taper', target: 51 },
+  ];
+  const lengthSummary = stats.poolSummaries.length > 0
+    ? stats.poolSummaries.map(summary => `${summary.poolLength}m: ${summary.averageSwolf.toFixed(0)} (n=${summary.count})`).join(' · ')
+    : 'Sin cadencia registrada';
+  const currentEquivalent = stats.average25mEquivalent;
+  const drift = stats.longSwimDriftPct;
+
+  return (
+    <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+      <div>
+        <h3 className="text-sm font-bold text-white">Check de eficiencia · SWOLF</h3>
+        <p className="text-[11px] text-slate-500">Solo usa cadencia registrada. El equivalente a 25 m normaliza matemáticamente las piscinas de 20 m; todavía no hay muestra de 50 m.</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="border-l-2 border-cyan-400 pl-3">
+          <span className="block text-[10px] uppercase text-slate-500">SWOLF actual · 25m equivalente</span>
+          <strong className="font-mono text-xl text-cyan-300">{currentEquivalent === null ? 'N/D' : currentEquivalent.toFixed(1)}</strong>
+          <p className="text-[10px] text-slate-500">{stats.measuredSessions} sesiones medidas · {lengthSummary}</p>
+        </div>
+        <div className="border-l-2 border-amber-400 pl-3">
+          <span className="block text-[10px] uppercase text-slate-500">Deriva en tirada larga</span>
+          <strong className="font-mono text-xl text-amber-300">{drift === null ? 'N/D' : `${drift >= 0 ? '+' : ''}${drift.toFixed(1)}%`}</strong>
+          <p className="text-[10px] text-slate-500">Máximo +5% · {drift === null ? 'faltan sesiones comparables' : `distancia &lt;2 km vs ≥2 km (n=${stats.shortSwimCount}/${stats.longSwimCount})`}</p>
+        </div>
+        <div className="border-l-2 border-emerald-400 pl-3">
+          <span className="block text-[10px] uppercase text-slate-500">Ritmo crucero eficiente</span>
+          <strong className="font-mono text-xl text-emerald-300">22–24 ciclos/min</strong>
+          <p className="text-[10px] text-slate-500">44–48 brazadas/min · DPS 1,8–2,1 m/ciclo a 2:10–2:20/100m</p>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[460px] border-collapse text-left text-xs">
+          <thead>
+            <tr className="border-b border-slate-800 text-[10px] uppercase text-slate-500">
+              <th className="py-2 pr-3 font-medium">Mes</th>
+              <th className="py-2 pr-3 font-medium">Fase</th>
+              <th className="py-2 pr-3 text-right font-medium">Objetivo 25m</th>
+              <th className="py-2 text-right font-medium">50m estimado</th>
+            </tr>
+          </thead>
+          <tbody>
+            {monthlyTargets.map((row, index) => (
+              <tr key={row.month} className={`border-b border-slate-800/60 ${index === 0 ? 'text-cyan-200' : 'text-slate-300'}`}>
+                <td className="py-2 pr-3 font-medium">{row.month}</td>
+                <td className="py-2 pr-3 text-slate-400">{row.phase}</td>
+                <td className="py-2 pr-3 text-right font-mono tabular-nums">{index === 0 && currentEquivalent !== null ? currentEquivalent.toFixed(1) : `≤${row.target}`}</td>
+                <td className="py-2 text-right font-mono tabular-nums">{index === 0 && currentEquivalent !== null ? '—' : `≤${row.target * 2}`}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-[10px] text-slate-500">Los objetivos de 50 m duplican la referencia de 25 m y son provisionales, no equivalen a datos medidos. Si el SWOLF supera tu objetivo en &gt;5%: 4×50 m contando brazadas, 6×50 m de sculling/catch suave y 3×400 m a ritmo constante, manteniendo el gesto relajado y sin dolor.</p>
+    </section>
+  );
+};
+
 interface SwimAnalyticsViewProps {
   activities: SwimActivity[];
 }
@@ -241,6 +365,9 @@ export const SwimAnalyticsView: React.FC<SwimAnalyticsViewProps> = ({ activities
           <WeeklyRollingMean activities={filteredActivities} />
         </ChartPanel>
       </div>
+
+      <SwolfEfficiencyPanel activities={filteredActivities} />
+      <TrainingHeatmap activities={activities} />
     </div>
   );
 };

@@ -184,6 +184,18 @@ segunda línea",3000,2600,"2,000"`;
   assert.equal(parsed[0].movingTime, 2600);
 });
 
+test('parseStravaCsv preserves recorded swim cadence and local start time', () => {
+  const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Moving Time,Distance,Pool Length,Average Cadence
+cadence,"Oct 26, 2026, 6:18:12 AM",Morning swim,Swim,1200,1000,25,22`;
+
+  const parsed = parseStravaCsv(csv);
+
+  assert.equal(parsed.length, 1);
+  assert.equal(parsed[0].averageCadence, 22);
+  assert.equal(parsed[0].hasRecordedCadence, true);
+  assert.equal(parsed[0].startedAt, '2026-10-26T06:18:12');
+});
+
 test('parseStravaCsv recalculates historical pool SWOLF with 20m length', () => {
   const csv = `Activity ID,Activity Date,Activity Name,Activity Type,Elapsed Time,Moving Time,Distance,Pool Length
 old,2025-03-24,Old pool,Swim,2100,2000,2000,25
@@ -303,19 +315,19 @@ test('calculateOceanmanReadiness computes readiness score and projections', () =
   assert.ok(readiness.overallScore > 0);
   assert.ok(readiness.daysRemaining > 0);
   assert.equal(readiness.longestSwimMeters, 10000);
-  assert.equal(readiness.checks.length, 5);
+  assert.equal(readiness.checks.length, 6);
   assert.ok(readiness.historicalEvolution.length > 0);
   assert.ok(readiness.estimatedFinishTimeSec > 0);
 });
 
-test('readiness has five measurable weighted checks', () => {
+test('readiness has six measurable weighted checks', () => {
   const activities: SwimActivity[] = [
     { id: 'ow-1', date: '2026-10-12', title: 'Long open water', type: 'open_water', distance: 5000, elapsedTime: 5200, movingTime: 5000, pacePer100m: 100, source: 'strava_csv' },
     { id: 'pool-1', date: '2026-10-14', title: 'Pool', type: 'pool', distance: 3000, elapsedTime: 3100, movingTime: 3000, pacePer100m: 100, source: 'strava_csv' },
   ];
 
   const { checks } = evaluateReadinessChecks(activities, new Date('2026-10-26T12:00:00'));
-  assert.equal(checks.length, 5);
+  assert.equal(checks.length, 6);
   assert.equal(checks.reduce((sum, check) => sum + check.weight, 0), 100);
   assert.deepEqual(checks.map(check => check.id), [
     'check-1-pool-longest',
@@ -323,6 +335,7 @@ test('readiness has five measurable weighted checks', () => {
     'check-3-volume-weekly-monthly',
     'check-4-open-water-continuity',
     'check-5-weekly-consistency',
+    'check-6-swolf-efficiency',
   ]);
 });
 

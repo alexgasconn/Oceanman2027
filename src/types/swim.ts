@@ -15,6 +15,7 @@ export interface SwimSplit {
 export interface SwimActivity {
   id: string;
   date: string; // ISO format YYYY-MM-DD or YYYY-MM-DDTHH:mm:ss
+  startedAt?: string; // Local start date/time for weekday-hour analytics
   title: string;
   type: SwimActivityType; // 'pool' | 'open_water'
   distance: number; // in meters
@@ -28,6 +29,7 @@ export interface SwimActivity {
   openWaterTrigger?: string;
   pacePer100m: number; // in seconds per 100m strictly using movingTime
   averageCadence?: number; // SPM (Strokes / minute)
+  hasRecordedCadence?: boolean;
   totalStrokes?: number;
   swolf?: number;
   dps?: number; // Distance per stroke cycle in meters
@@ -78,7 +80,7 @@ export interface OrtaEnvironmentalCondition {
 
 export interface ReadinessCheckItem {
   id: string;
-  checkNumber: number; // 1 to 7
+  checkNumber: number; // 1 to 6
   category: 'endurance' | 'volume' | 'open_water' | 'efficiency' | 'pacing' | 'nutrition';
   title: string;
   shortTitle?: string;

@@ -33,7 +33,7 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
 }) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'passed' | 'warning' | 'pending'>('all');
 
-  // Filter the 7 checks
+  // Filter the readiness checks
   const filteredChecks = useMemo(() => {
     return readiness.checks.filter(c => {
       if (filterStatus === 'all') return true;

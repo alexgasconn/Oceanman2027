@@ -11,6 +11,7 @@ import {
   OrtaEnvironmentalCondition
 } from '../types/swim.ts';
 import { getCalendarWeek, getRecentCompletedTrainingWeeks, getTrainingWorkWeek } from './trainingWeeks.ts';
+import { getSwolfEfficiencyStats } from './swimAnalytics.ts';
 function parseCsvRows(csvText: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -229,6 +230,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
   const typeIdx = headers.findIndex(h => h && (h.includes('activity type') || h.includes('type') || h.includes('tipo')));
   const distIdx = headers.findIndex(h => h && (h.includes('distance') || h.includes('distancia')));
   const poolLengthIdx = headers.findIndex(h => h && (h === 'pool length' || h.includes('pool length') || h.includes('longitud piscina')));
+  const cadenceIdx = headers.findIndex(h => h && (h === 'average cadence' || h.includes('average cadence') || h.includes('avg cadence')));
 
   // Precise detection of moving time vs elapsed time in Strava exports
   const movingTimeIdx = headers.findIndex(h => h && (
@@ -331,10 +333,13 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
 
     // Date safe parsing
     let actDate = new Date().toISOString().slice(0, 10);
+    let startedAt: string | undefined;
     if (dateIdx >= 0 && dateIdx < cols.length && cols[dateIdx]) {
       const parsedDate = new Date(String(cols[dateIdx]));
       if (!isNaN(parsedDate.getTime())) {
         actDate = parsedDate.toISOString().slice(0, 10);
+        const pad = (value: number) => String(value).padStart(2, '0');
+        startedAt = `${parsedDate.getFullYear()}-${pad(parsedDate.getMonth() + 1)}-${pad(parsedDate.getDate())}T${pad(parsedDate.getHours())}:${pad(parsedDate.getMinutes())}:${pad(parsedDate.getSeconds())}`;
       }
     }
 
@@ -364,8 +369,12 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
     const pacePer100m = (movingTime / distance) * 100; // STRICTLY movingTime
     const speedMps = distance / movingTime;
 
+    const recordedCadence = cadenceIdx >= 0 ? parseFloat(cols[cadenceIdx]) : Number.NaN;
+    const hasRecordedCadence = Number.isFinite(recordedCadence) && recordedCadence > 0;
     const baseCadence = isOpenWater ? 62 : 64;
-    const avgCadence = baseCadence + Math.round((speedMps - 1.1) * 10);
+    const avgCadence = hasRecordedCadence
+      ? recordedCadence
+      : baseCadence + Math.round((speedMps - 1.1) * 10);
     const dps = calculateDPS(speedMps, avgCadence);
     const swolf = calculateSWOLF(pacePer100m, dps, isOpenWater ? 50 : poolLength || 25);
     const strokeIndex = calculateStrokeIndex(speedMps, dps);
@@ -376,6 +385,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
     parsedActivities.push({
       id: (idIdx >= 0 && cols[idIdx]) ? cols[idIdx] : `swim-${Date.now()}-${i}`,
       date: actDate,
+      startedAt,
       title: actTitle,
       type: activityType,
       distance,
@@ -391,6 +401,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
         : 'Piscina (sin cambio de elevación GPS)',
       pacePer100m: Number(pacePer100m.toFixed(1)),
       averageCadence: avgCadence,
+      hasRecordedCadence,
       totalStrokes: Math.round((movingTime / 60) * avgCadence),
       dps,
       swolf,
@@ -613,7 +624,7 @@ export function evaluateReadinessChecks(
     unit: 'km',
     status: check1Status,
     score: check1Score,
-    weight: 25,
+    weight: 20,
     details: maxPoolKm > 0 ? `Máxima sesión en piscina registrada: ${maxPoolKm.toFixed(2)} km.` : 'Registra sesiones de piscina para activar este check.',
     summary: check1M2Passed ? 'Resistencia en piscina sobresaliente.' : check1M1Passed ? 'Hito base 6k superado.' : 'Aumenta tiradas largas en piscina.',
   };
@@ -654,7 +665,7 @@ export function evaluateReadinessChecks(
     unit: 'km',
     status: check2Status,
     score: check2Score,
-    weight: 25,
+    weight: 20,
     details: maxOwKm > 0 ? `Tirada máxima en aguas abiertas: ${maxOwKm.toFixed(2)} km.` : 'Detectadas a partir de altitud GPS no nula.',
     summary: check2M3Passed ? 'Simulacro estrella completado.' : check2M1Passed ? 'Hito 5k superado en aguas vivas.' : 'Planifica tu primer test continuo > 5k.',
   };
@@ -691,7 +702,7 @@ export function evaluateReadinessChecks(
     unit: 'km/sem',
     status: check3Status,
     score: check3Score,
-    weight: 25,
+    weight: 20,
     details: `Media de ${recentWeeklyKm} km/sem durante las últimas ${recentWorkWeeks.length} semanas completas.`,
     summary: check3M3Passed ? 'Volumen semanal objetivo alcanzado.' : 'Aumenta el volumen de forma progresiva.',
   };
@@ -771,12 +782,58 @@ export function evaluateReadinessChecks(
     summary: check5M2Passed ? 'Ritmo de entrenamiento constante.' : 'Intenta sostener tres sesiones por semana.',
   };
 
+  const swolfStats = getSwolfEfficiencyStats(activities);
+  const currentSwolf = swolfStats.average25mEquivalent ?? 0;
+  const check6M1Passed = currentSwolf > 0 && currentSwolf <= 53;
+  const check6M2Passed = currentSwolf > 0 && currentSwolf <= 52;
+  const check6M3Passed = currentSwolf > 0 && currentSwolf <= 51;
+  const check6Status: ReadinessCheckItem['status'] = check6M3Passed
+    ? 'passed'
+    : check6M1Passed ? 'warning' : 'pending';
+  const check6Score = currentSwolf > 0
+    ? Math.max(0, Math.min(100, Math.round(100 - Math.max(0, currentSwolf - 51) * 10)))
+    : 0;
+  const swolfBaseline = swolfStats.poolSummaries.length > 0
+    ? swolfStats.poolSummaries.map(summary => `${summary.poolLength}m: ${summary.averageSwolf.toFixed(0)} (n=${summary.count})`).join(' · ')
+    : 'Sin cadencia registrada en sesiones de piscina';
+  const driftDetail = swolfStats.longSwimDriftPct === null
+    ? 'Deriva larga aún no calculable: faltan al menos dos sesiones cortas y dos largas en la misma piscina.'
+    : `Deriva <2 km frente a ≥2 km: ${swolfStats.longSwimDriftPct >= 0 ? '+' : ''}${swolfStats.longSwimDriftPct.toFixed(1)}% (n=${swolfStats.shortSwimCount} vs ${swolfStats.longSwimCount}); límite recomendado: +5%.`;
+
+  const check6: ReadinessCheckItem = {
+    id: 'check-6-swolf-efficiency',
+    checkNumber: 6,
+    category: 'efficiency',
+    title: 'Eficiencia de nado (SWOLF)',
+    shortTitle: 'SWOLF',
+    description: 'SWOLF de piscina calculado solo en sesiones con cadencia registrada. Las longitudes distintas se expresan como equivalente teórico a 25 m; no se mezclan aguas abiertas ni cadencias estimadas.',
+    baseline: swolfBaseline,
+    milestones: [
+      { level: 'Base', label: 'Base', target: '≤53 (25m eq) · ≤106 (50m estimado)', isCompleted: check6M1Passed },
+      { level: 'CSS/Ritmo', label: 'CSS', target: '≤52 (25m eq) · ≤104 (50m estimado)', isCompleted: check6M2Passed },
+      { level: 'Pico/Simulacro', label: 'Pico', target: '≤51 (25m eq) · ≤102 (50m estimado)', isCompleted: check6M3Passed },
+    ],
+    currentValue: currentSwolf,
+    targetValue: 51,
+    currentValueFormatted: currentSwolf > 0 ? `${currentSwolf.toFixed(1)} (25m eq)` : 'N/D',
+    targetValueFormatted: '≤51 (25m eq)',
+    unit: 'SWOLF',
+    status: check6Status,
+    score: check6Score,
+    weight: 15,
+    details: `${swolfStats.measuredSessions} sesiones de piscina con cadencia registrada. ${driftDetail}`,
+    summary: swolfStats.measuredSessions === 0
+      ? 'Registra la cadencia de tus sesiones de piscina para activar este check.'
+      : check6M3Passed ? 'Objetivo de eficiencia de pico alcanzado.' : check6M1Passed ? 'Objetivo de base alcanzado; consolida antes de exigir más ritmo.' : 'Trabaja una brazada larga y relajada sin forzar el hombro.',
+  };
+
   const checks: ReadinessCheckItem[] = [
     check1,
     check2,
     check3,
     check4,
     check5,
+    check6,
   ];
 
   const totalWeight = checks.reduce((sum, c) => sum + c.weight, 0);
@@ -914,7 +971,7 @@ export function calculateOceanmanReadiness(
       volumeLast90DaysMeters: 0,
       checks: [],
       passedChecksCount: 0,
-      totalChecksCount: 7,
+      totalChecksCount: 6,
       longestSwimMeters: 0,
       longestDurationSec: 0,
       openWaterSessionsCount: 0,
