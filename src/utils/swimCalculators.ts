@@ -806,7 +806,7 @@ export function evaluateReadinessChecks(
     category: 'efficiency',
     title: 'Eficiencia de nado (SWOLF)',
     shortTitle: 'SWOLF',
-    description: 'SWOLF de piscina calculado solo en sesiones con cadencia registrada. Las longitudes distintas se expresan como equivalente teórico a 25 m; no se mezclan aguas abiertas ni cadencias estimadas.',
+    description: 'Estimación de SWOLF desde moving time total y cadencia media registrada; el CSV no incluye conteo por largo. Las longitudes distintas se expresan como equivalente teórico a 25 m.',
     baseline: swolfBaseline,
     milestones: [
       { level: 'Base', label: 'Base', target: '≤54 (25m eq) · ≤108 (50m estimado)', isCompleted: check6M1Passed },

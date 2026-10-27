@@ -251,12 +251,12 @@ const SwolfEfficiencyPanel: React.FC<{ activities: SwimActivity[] }> = ({ activi
     <section className="space-y-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
       <div>
         <h3 className="text-sm font-bold text-white">Check de eficiencia · SWOLF</h3>
-        <p className="text-[11px] text-slate-500">Solo usa cadencia registrada. El equivalente a 25 m normaliza matemáticamente las piscinas de 20 m; todavía no hay muestra de 50 m.</p>
+        <p className="text-[11px] text-slate-500">Estimación desde moving time y cadencia media registrada, no desde conteo por largo. El equivalente a 25 m normaliza matemáticamente las piscinas de 20 m; todavía no hay muestra de 50 m.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <div className="border-l-2 border-cyan-400 pl-3">
-          <span className="block text-[10px] uppercase text-slate-500">SWOLF actual · 25m equivalente</span>
+          <span className="block text-[10px] uppercase text-slate-500">SWOLF estimado · 25m equivalente</span>
           <strong className="font-mono text-xl text-cyan-300">{currentEquivalent === null ? 'N/D' : currentEquivalent.toFixed(1)}</strong>
           <p className="text-[10px] text-slate-500">{stats.measuredSessions} sesiones medidas · {lengthSummary}</p>
         </div>
