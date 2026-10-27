@@ -192,13 +192,13 @@ export const EvolutionTelemetryView: React.FC<EvolutionTelemetryViewProps> = ({
 
     let nearestPoint: typeof dataPoints[number] | null = null;
     let nearestDistance = 18;
-    dataPoints.forEach(point => {
+    for (const point of dataPoints) {
       const distance = Math.hypot(point.x - chartPointer.x, point.y - chartPointer.y);
       if (distance < nearestDistance) {
         nearestDistance = distance;
         nearestPoint = point;
       }
-    });
+    }
     return nearestPoint;
   };
 
