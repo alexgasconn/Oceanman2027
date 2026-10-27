@@ -7,7 +7,8 @@ import {
   AlertCircle,
   Archive,
   Compass,
-  Loader2
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { SwimActivity } from '../types/swim.ts';
 import { parseStravaExportFile } from '../utils/stravaExportParser.ts';
@@ -103,6 +104,26 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-6 space-y-5 overflow-y-auto flex-1">
+          <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-300">
+            <h3 className="font-semibold text-white">¿Aún no tienes tu exportación?</h3>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs leading-relaxed text-slate-400">
+              <li>
+                Abre los{' '}
+                <a
+                  href="https://www.strava.com/account"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-medium text-cyan-400 hover:text-cyan-300"
+                >
+                  ajustes de tu cuenta de Strava <ExternalLink className="h-3 w-3" />
+                </a>
+                {' '}y solicita la descarga de tu archivo de datos.
+              </li>
+              <li>Strava te enviará un correo con el enlace de descarga; suele tardar unos 5 minutos.</li>
+              <li>Descarga el ZIP y selecciónalo aquí para importar tus nados.</li>
+            </ol>
+          </div>
+
           {/* Universal Drag & Drop Upload Zone */}
           <div
             onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
