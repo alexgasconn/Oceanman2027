@@ -784,7 +784,7 @@ export function evaluateReadinessChecks(
 
   const swolfStats = getSwolfEfficiencyStats(activities);
   const currentSwolf = swolfStats.average25mEquivalent ?? 0;
-  const check6M1Passed = currentSwolf > 0 && currentSwolf <= 53;
+  const check6M1Passed = currentSwolf > 0 && currentSwolf <= 54;
   const check6M2Passed = currentSwolf > 0 && currentSwolf <= 52;
   const check6M3Passed = currentSwolf > 0 && currentSwolf <= 51;
   const check6Status: ReadinessCheckItem['status'] = check6M3Passed
@@ -809,7 +809,7 @@ export function evaluateReadinessChecks(
     description: 'SWOLF de piscina calculado solo en sesiones con cadencia registrada. Las longitudes distintas se expresan como equivalente teórico a 25 m; no se mezclan aguas abiertas ni cadencias estimadas.',
     baseline: swolfBaseline,
     milestones: [
-      { level: 'Base', label: 'Base', target: '≤53 (25m eq) · ≤106 (50m estimado)', isCompleted: check6M1Passed },
+      { level: 'Base', label: 'Base', target: '≤54 (25m eq) · ≤108 (50m estimado)', isCompleted: check6M1Passed },
       { level: 'CSS/Ritmo', label: 'CSS', target: '≤52 (25m eq) · ≤104 (50m estimado)', isCompleted: check6M2Passed },
       { level: 'Pico/Simulacro', label: 'Pico', target: '≤51 (25m eq) · ≤102 (50m estimado)', isCompleted: check6M3Passed },
     ],

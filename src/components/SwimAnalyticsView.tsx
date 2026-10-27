@@ -232,13 +232,13 @@ const SwolfEfficiencyPanel: React.FC<{ activities: SwimActivity[] }> = ({ activi
   const stats = useMemo(() => getSwolfEfficiencyStats(activities), [activities]);
   const monthlyTargets = [
     { month: 'Oct 2026', phase: 'Referencia', target: 54 },
-    { month: 'Nov 2026', phase: 'Base', target: 54 },
-    { month: 'Dic 2026', phase: 'Base', target: 53 },
-    { month: 'Ene 2027', phase: 'Base', target: 53 },
-    { month: 'Feb 2027', phase: 'CSS / ritmo', target: 52 },
+    { month: 'Nov 2026', phase: 'Base', target: 55 },
+    { month: 'Dic 2026', phase: 'Base', target: 54 },
+    { month: 'Ene 2027', phase: 'Base', target: 54 },
+    { month: 'Feb 2027', phase: 'CSS / ritmo', target: 53 },
     { month: 'Mar 2027', phase: 'CSS / ritmo', target: 52 },
     { month: 'Abr 2027', phase: 'CSS / ritmo', target: 52 },
-    { month: 'May 2027', phase: 'Pico / simulacro', target: 51 },
+    { month: 'May 2027', phase: 'Pico / simulacro', target: 52 },
     { month: 'Jun 2027', phase: 'Pico / taper', target: 51 },
   ];
   const lengthSummary = stats.poolSummaries.length > 0
