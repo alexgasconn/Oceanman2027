@@ -131,8 +131,8 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
             onDrop={handleDrop}
             onClick={() => fileInputRef.current?.click()}
             className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${dragActive
-                ? 'border-cyan-400 bg-cyan-950/30'
-                : 'border-slate-800 hover:border-slate-700 bg-slate-950/40'
+              ? 'border-cyan-400 bg-cyan-950/30'
+              : 'border-slate-800 hover:border-slate-700 bg-slate-950/40'
               }`}
           >
             <input
@@ -223,8 +223,8 @@ export const StravaImportModal: React.FC<StravaImportModalProps> = ({
             onClick={handleConfirmImport}
             disabled={!parsedPreview || parsedPreview.length === 0}
             className={`px-5 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${parsedPreview && parsedPreview.length > 0
-                ? 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20'
-                : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+              ? 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-lg shadow-cyan-500/20'
+              : 'bg-slate-800 text-slate-600 cursor-not-allowed'
               }`}
           >
             Importar al Dashboard ({parsedPreview ? parsedPreview.length : 0})
