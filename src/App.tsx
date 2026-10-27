@@ -118,7 +118,7 @@ export default function App() {
               activity.hasWetsuit === undefined &&
               activity.dps === undefined &&
               activity.strokeIndex === undefined &&
-              activity.poolDistanceCorrection === undefined
+              activity.poolDistanceCorrection === source.poolDistanceCorrection
             )) return activity;
             changed = true;
             return recalculateSwimMetrics({

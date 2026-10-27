@@ -148,10 +148,17 @@ export function recalculateSwimMetrics(activity: SwimActivity): SwimActivity {
     ? 'pool'
     : detectOpenWater(elevationHigh, elevationLow, activity.hasPoolLength)
       ? 'open_water'
-      : 'unknown';
-  const poolLength = type === 'pool' ? activity.poolLength ?? null : null;
-  const pacePer100m = activity.distance > 0 && movingTime > 0
-    ? movingTime / activity.distance * 100
+      : 'pool';
+  const isHistoricalPool = type === 'pool' && activity.date.slice(0, 10) < '2025-03-25' && activity.date !== '';
+  const needsDistanceCorrection = isHistoricalPool && !activity.poolDistanceCorrection &&
+    (activity.poolLength == null || activity.poolLength === 25);
+  const distance = needsDistanceCorrection ? Math.round(activity.distance * 20 / 25) : activity.distance;
+  const poolDistanceCorrection = needsDistanceCorrection ? 'historical-20m' : activity.poolDistanceCorrection;
+  const poolLength = type === 'pool'
+    ? poolDistanceCorrection === 'historical-20m' ? 20 : activity.poolLength ?? null
+    : null;
+  const pacePer100m = distance > 0 && movingTime > 0
+    ? movingTime / distance * 100
     : 0;
   const movingRatio = elapsedTime > 0 && movingTime > 0
     ? Number((movingTime / elapsedTime * 100).toFixed(1))
@@ -161,12 +168,13 @@ export function recalculateSwimMetrics(activity: SwimActivity): SwimActivity {
   return {
     ...activity,
     type,
+    distance,
     movingTime,
     elapsedTime,
     isOpenWaterDetected: type === 'open_water',
     openWaterTrigger: type === 'open_water'
       ? `Cambio de elevación GPS: ${(elevationHigh - elevationLow).toFixed(1)}m`
-      : type === 'pool' ? 'Longitud de piscina registrada' : 'Datos insuficientes para clasificar',
+      : activity.hasPoolLength ? 'Longitud de piscina registrada' : 'Piscina por defecto',
     movingRatio,
     pacePer100m: Number(pacePer100m.toFixed(1)),
     poolLength,
@@ -180,7 +188,7 @@ export function recalculateSwimMetrics(activity: SwimActivity): SwimActivity {
     calories: activity.hasRecordedCalories ? activity.calories : undefined,
     waterTemp: activity.hasRecordedWaterTemp ? activity.waterTemp : undefined,
     hasWetsuit: undefined,
-    poolDistanceCorrection: undefined,
+    poolDistanceCorrection,
   };
 }
 
@@ -348,7 +356,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
     const waterTemp = tempIdx >= 0 ? parseFloat(cols[tempIdx]) : Number.NaN;
     const hasRecordedWaterTemp = Number.isFinite(waterTemp);
 
-    parsedActivities.push({
+    parsedActivities.push(recalculateSwimMetrics({
       id: (idIdx >= 0 && cols[idIdx]) ? cols[idIdx] : `swim-${Date.now()}-${i}`,
       date: actDate,
       startedAt,
@@ -386,7 +394,7 @@ export function parseStravaCsv(csvText: string): SwimActivity[] {
       hasRecordedWaterTemp,
       poolLength,
       source: 'strava_csv',
-    });
+    }));
   }
 
   return parsedActivities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -574,7 +582,7 @@ export function evaluateReadinessChecks(
   const check1M2 = projection !== null && projectedSec <= OFFICIAL_CUTOFF_TOTAL_SEC - 20 * 60;
   const check1M3 = projection !== null && projectedSec <= OFFICIAL_CUTOFF_TOTAL_SEC - 45 * 60;
   const check1Score = projection
-    ? Math.max(0, Math.min(100, Math.round((OFFICIAL_CUTOFF_TOTAL_SEC / Math.max(projectedSec, 1)) * 70)))
+    ? Math.max(0, Math.min(100, Math.round((OFFICIAL_CUTOFF_TOTAL_SEC / Math.max(projectedSec, 1)) * 60)))
     : 0;
 
   const check1: ReadinessCheckItem = {
@@ -635,7 +643,7 @@ export function evaluateReadinessChecks(
     targetValueFormatted: '10 km',
     unit: 'km',
     status: check2M3 ? 'passed' : check2M1 ? 'warning' : 'pending',
-    score: Math.min(100, Math.round(maxOwKm / 10 * 100)),
+    score: Math.round(Math.min(1, maxOwKm / 10) ** 1.5 * 100),
     weight: 20,
     details: `Tu nado más largo en aguas abiertas es de ${maxOwKm.toFixed(2)} km frente a los 14 km de la prueba.`,
     summary: check2M3 ? 'Distancia específica consolidada.' : 'Aumenta progresivamente la tirada en aguas abiertas.',
@@ -668,7 +676,7 @@ export function evaluateReadinessChecks(
     targetValueFormatted: '20 km/sem',
     unit: 'km/sem',
     status: check3M3 ? 'passed' : check3M1 ? 'warning' : 'pending',
-    score: Math.min(100, Math.round(weeklyKm / 20 * 100)),
+    score: Math.round(Math.min(1, weeklyKm / 20) ** 1.5 * 100),
     weight: 20,
     details: `Media de ${weeklyKm} km/sem en las últimas ${recentWeeks.length} semanas completas.`,
     summary: check3M3 ? 'Volumen en objetivo.' : 'El volumen semanal es el principal limitante.',
@@ -701,7 +709,7 @@ export function evaluateReadinessChecks(
     unit: '%',
     status: check4M2 ? 'passed' : check4M1 ? 'warning' : 'pending',
     isDataAvailable: continuity !== null,
-    score: Math.min(100, Math.round(continuityPct / 90 * 100)),
+    score: Math.max(0, Math.min(100, Math.round((continuityPct - 50) / 40 * 100))),
     weight: 15,
     details: continuity
       ? `Mediana de ${continuityPct}% en movimiento: cada parada aumenta el tiempo oficial de carrera.`
@@ -782,10 +790,10 @@ export function evaluateReadinessChecks(
 
   const checks: ReadinessCheckItem[] = [check1, check2, check3, check4, check5, check6];
 
-  const scoredChecks = checks.filter(check => check.isScored !== false && check.isDataAvailable !== false);
+  const scoredChecks = checks.filter(check => check.isScored !== false);
   const scoredWeight = scoredChecks.reduce((sum, check) => sum + check.weight, 0);
   const weightedScore = scoredWeight > 0
-    ? scoredChecks.reduce((sum, check) => sum + check.score * check.weight, 0) / scoredWeight
+    ? scoredChecks.reduce((sum, check) => sum + (check.isDataAvailable === false ? 0 : check.score * check.weight), 0) / scoredWeight
     : 0;
   const passedCount = checks.filter(c => c.status === 'passed').length;
 

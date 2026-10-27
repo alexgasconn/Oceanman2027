@@ -18,7 +18,6 @@ import {
 } from 'lucide-react';
 import { OceanmanReadiness, SwimActivity, ReadinessCheckItem } from '../types/swim.ts';
 import { formatDistance, formatPace, ORTA_HISTORICAL_CONDITIONS } from '../utils/swimCalculators.ts';
-import { buildReadinessTimeline, ReadinessGranularity } from '../utils/readinessTimeline.ts';
 import { HistoricalReadinessView } from './HistoricalReadinessView.tsx';
 
 interface OceanmanReadinessViewProps {
@@ -33,12 +32,6 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
   onOpenCalculator,
 }) => {
   const [filterStatus, setFilterStatus] = useState<'all' | 'passed' | 'warning' | 'pending'>('all');
-  const [granularity, setGranularity] = useState<ReadinessGranularity>('weekly');
-
-  const timeline = useMemo(
-    () => buildReadinessTimeline(activities, granularity),
-    [activities, granularity],
-  );
 
   // Filter the readiness checks
   const filteredChecks = useMemo(() => {
@@ -172,69 +165,6 @@ export const OceanmanReadinessView: React.FC<OceanmanReadinessViewProps> = ({
             Tiempo nado vs tiempo total
           </p>
         </div>
-      </div>
-
-      {/* Readiness percentage resampled over time */}
-      <div className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/90 p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-sm font-bold text-white">Evolución del % de preparación</h3>
-            <p className="text-[11px] text-slate-500">
-              Recalculado al cierre de cada periodo usando solo las sesiones disponibles hasta esa fecha.
-            </p>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs">
-            {([
-              ['daily', 'Diario'],
-              ['weekly', 'Semanal'],
-              ['monthly', 'Mensual'],
-            ] as [ReadinessGranularity, string][]).map(([id, label]) => (
-              <button
-                key={id}
-                type="button"
-                aria-pressed={granularity === id}
-                onClick={() => setGranularity(id)}
-                className={`cursor-pointer rounded px-3 py-1 font-semibold transition-colors ${granularity === id ? 'bg-cyan-500/20 text-cyan-300' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {timeline.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-500">Sin sesiones suficientes para construir la serie.</p>
-        ) : (
-          <>
-            <div className="flex items-end gap-1 overflow-x-auto pb-2" role="img" aria-label="Evolución del porcentaje de preparación">
-              {timeline.map(point => (
-                <div key={point.periodKey} className="flex min-w-[26px] flex-1 flex-col items-center gap-1">
-                  <span className="font-mono text-[9px] text-slate-400">{point.readinessPct}</span>
-                  <div
-                    className="w-full rounded-t bg-cyan-500/70"
-                    style={{ height: `${Math.max(2, point.readinessPct * 1.1)}px` }}
-                    title={`${point.label}: ${point.readinessPct}% · ${point.sessionsToDate} sesiones acumuladas`}
-                  />
-                  <span className="truncate text-[8px] text-slate-500">{point.label}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-x-6 text-[11px] text-slate-400">
-              <span>
-                Último periodo:{' '}
-                <strong className="text-white">{timeline[timeline.length - 1].readinessPct}%</strong>
-              </span>
-              <span>
-                Variación vs periodo previo:{' '}
-                <strong className="text-white">
-                  {timeline.length > 1
-                    ? `${timeline[timeline.length - 1].readinessPct - timeline[timeline.length - 2].readinessPct >= 0 ? '+' : ''}${timeline[timeline.length - 1].readinessPct - timeline[timeline.length - 2].readinessPct} pts`
-                    : 'N/D'}
-                </strong>
-              </span>
-            </div>
-          </>
-        )}
       </div>
 
       {/* Readiness checks */}

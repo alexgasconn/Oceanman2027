@@ -9,7 +9,7 @@ interface ActivitiesListViewProps {
   onOpenImport: () => void;
 }
 
-type SortField = 'date' | 'title' | 'type' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'cadence' | 'dps' | 'swolf' | 'spl';
+type SortField = 'date' | 'title' | 'type' | 'distance' | 'movingTime' | 'movingRatio' | 'pace' | 'spl';
 
 export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   activities,
@@ -17,7 +17,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
   onOpenImport,
 }) => {
   const [search, setSearch] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'open_water' | 'pool' | 'unknown'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'open_water' | 'pool'>('all');
   const [distRange, setDistRange] = useState<'all' | 'under_3k' | '3k_6k' | '6k_10k' | 'over_10k'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'last_30d' | 'last_90d' | 'this_year'>('all');
   const [sortBy, setSortBy] = useState<SortField>('date');
@@ -104,9 +104,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
             case 'movingTime': return activity.movingTime;
             case 'movingRatio': return activity.movingRatio;
             case 'pace': return activity.pacePer100m;
-            case 'cadence': return activity.averageCadence;
-            case 'dps': return activity.dps;
-            case 'swolf': return activity.swolf;
             case 'spl': return activity.strokesPerLength;
           }
         };
@@ -161,12 +158,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                   }`}
               >
                 Piscina
-              </button>
-              <button
-                onClick={() => setFilterType('unknown')}
-                className={`px-3 py-1 rounded-md font-semibold transition-colors cursor-pointer ${filterType === 'unknown' ? 'bg-slate-700 text-slate-200' : 'text-slate-400 hover:text-slate-200'}`}
-              >
-                Sin clasificar ({activities.filter(activity => activity.type === 'unknown').length})
               </button>
             </div>
 
@@ -248,9 +239,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                 {renderSortHeader('Tiempo nado', 'movingTime', 'text-right')}
                 {renderSortHeader('Moving Ratio', 'movingRatio', 'text-right')}
                 {renderSortHeader('Ritmo /100m', 'pace', 'text-right')}
-                {renderSortHeader('Cadencia (export)', 'cadence', 'text-right')}
-                {renderSortHeader('DPS', 'dps', 'text-right')}
-                {renderSortHeader('SWOLF', 'swolf', 'text-right')}
                 {renderSortHeader('SPL', 'spl', 'text-right')}
                 <th className="py-3.5 px-4 text-center">Detalle</th>
               </tr>
@@ -258,7 +246,7 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
             <tbody className="divide-y divide-slate-800/60 font-mono tabular-nums text-slate-300">
               {filteredAndSorted.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-12 text-center text-slate-500 font-sans">
+                  <td colSpan={9} className="py-12 text-center text-slate-500 font-sans">
                     No se encontraron sesiones con los filtros seleccionados.{' '}
                     <button
                       onClick={resetFilters}
@@ -314,15 +302,6 @@ export const ActivitiesListView: React.FC<ActivitiesListViewProps> = ({
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-cyan-400 whitespace-nowrap">
                         {formatPace(act.pacePer100m)}
-                      </td>
-                      <td className="py-3 px-4 text-right text-amber-400 whitespace-nowrap">
-                        {act.hasRecordedCadence && act.averageCadence !== undefined ? act.averageCadence : 'N/D'}
-                      </td>
-                      <td className="py-3 px-4 text-right text-blue-300 whitespace-nowrap">
-                        {act.hasRecordedDps && act.dps !== undefined ? `${act.dps}m` : 'N/D'}
-                      </td>
-                      <td className="py-3 px-4 text-right text-violet-300 whitespace-nowrap">
-                        {act.hasRecordedSwolf && act.swolf !== undefined ? act.swolf : 'N/D'}
                       </td>
                       <td className="py-3 px-4 text-right text-violet-300 whitespace-nowrap">
                         {act.hasRecordedSpl && act.strokesPerLength !== undefined ? act.strokesPerLength : 'N/D'}
